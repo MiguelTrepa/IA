@@ -6,6 +6,11 @@
 # 00000 Nome1
 # 00000 Nome2
 
+
+from sys import stdin
+import numpy as np
+from search import Problem, Node
+
 class NuruominoState:
     state_id = 0
 
@@ -21,7 +26,6 @@ class NuruominoState:
 
 class Board:
     """Representação interna de um tabuleiro do Puzzle Nuruomino."""
-
     def adjacent_regions(self, region:int) -> list:
         """Devolve uma lista das regiões que fazem fronteira com a região enviada no argumento."""
         #TODO
@@ -37,7 +41,6 @@ class Board:
         #TODO
         pass
     
-    
     @staticmethod
     def parse_instance():
         """Lê o test do standard input (stdin) que é passado como argumento
@@ -49,8 +52,13 @@ class Board:
             > from sys import stdin
             > line = stdin.readline().split()
         """
-        #TODO
-        pass    
+        board_list = []
+        for line in stdin:
+            line_ar = [int(elem) for elem in line.split()]
+            board_list.append(line_ar)
+        board = np.array(board_list, np.int8)
+
+        return board
 
     # TODO: outros metodos da classe Board
 
@@ -87,3 +95,7 @@ class Nuruomino(Problem):
         """Função heuristica utilizada para a procura A*."""
         # TODO
         pass
+
+if __name__ == "__main__":
+    board = Board.parse_instance()
+    print(board)
