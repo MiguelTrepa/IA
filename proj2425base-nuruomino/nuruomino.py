@@ -26,6 +26,10 @@ class NuruominoState:
 
 class Board:
     """Representação interna de um tabuleiro do Puzzle Nuruomino."""
+    def __init__(self, board=None):
+        """Construtor da classe Board. Se o argumento for None, cria um tabuleiro vazio."""
+        self.board = Board.parse_instance() 
+
     def adjacent_regions(self, region:int) -> list:
         """Devolve uma lista das regiões que fazem fronteira com a região enviada no argumento."""
         #TODO
@@ -53,12 +57,19 @@ class Board:
             > line = stdin.readline().split()
         """
         board_list = []
-        for line in stdin:
+        for line in stdin.readlines():
             line_ar = [int(elem) for elem in line.split()]
             board_list.append(line_ar)
         board = np.array(board_list, np.int8)
 
         return board
+    
+    def __str__(self):
+        """Devolve uma representação textual do tabuleiro."""
+        formatted_board = ""
+        for row in self.board:
+            formatted_board += "\t".join(str(cell) for cell in row) + "\n"
+        return formatted_board
 
     # TODO: outros metodos da classe Board
 
@@ -87,7 +98,7 @@ class Nuruomino(Problem):
     def goal_test(self, state: NuruominoState):
         """Retorna True se e só se o estado passado como argumento é
         um estado objetivo. Deve verificar se todas as posições do tabuleiro
-        estão preenchidas de acordo com as regras do problema."""
+        estão preenchidas de acordo com as regras do     problema."""
         #TODO
         pass 
 
@@ -97,5 +108,5 @@ class Nuruomino(Problem):
         pass
 
 if __name__ == "__main__":
-    board = Board.parse_instance()
-    print(board)
+    board = Board()
+    print(board.__str__())
