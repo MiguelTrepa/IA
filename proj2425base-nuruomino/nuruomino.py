@@ -48,6 +48,11 @@ I_SHAPES = [make_piece_variations(I_SHAPE)]
 T_SHAPES = [make_piece_variations(T_SHAPE)]
 S_SHAPES = [make_piece_variations(S_SHAPE)]
 
+
+from sys import stdin
+import numpy as np
+from search import Problem, Node
+
 class NuruominoState:
     state_id = 0
 
@@ -124,6 +129,7 @@ class Board:
             > line = stdin.readline().split()
         """
         board_list = []
+
         for line in stdin.readlines():
             line_ar = [elem for elem in line.split()]
             board_list.append(line_ar)
@@ -187,3 +193,4 @@ if __name__ == "__main__":
 
     # Criar o estado inicial do problema
     initial_state = NuruominoState(problem_board)
+
