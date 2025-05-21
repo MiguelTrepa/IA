@@ -12,31 +12,41 @@ import numpy as np
 from search import Problem, Node
 
 # Each shape is a list of (row, col) offsets from the origin (0, 0)
-L_SHAPES = [
-    [(0,0), (1,0), (2,0), (2,1)],
-    [(0,0), (0,1), (0,2), (1,0)],
-    [(0,0), (0,1), (1,1), (2,1)],
-    [(0,2), (1,0), (1,1), (1,2)],
-]
+L_SHAPE = [(0,0), (1,0), (2,0), (2,1)]
 
-I_SHAPES = [
-    [(0,0), (1,0), (2,0), (3,0)],
-    [(0,0), (0,1), (0,2), (0,3)]
-]
+I_SHAPE = [(0,0), (1,0), (2,0), (3,0)]
 
-T_SHAPES = [
-    [(0,0), (0,1), (0,2), (1,1)],
-    [(0,1), (1,0), (1,1), (2,1)],
-    [(1,0), (1,1), (1,2), (0,1)],
-    [(0,0), (1,0), (2,0), (1,1)]
-]
+T_SHAPE = [(0,0), (0,1), (0,2), (1,1)]
 
-S_SHAPES = [
-    [(0,1), (0,2), (1,0), (1,1)],
-    [(0,0), (1,0), (1,1), (2,1)],
-    [(0,0), (0,1), (1,1), (1,2)],
-    [(0,1), (1,0), (1,1), (2,0)]
-]
+S_SHAPE = [(0,1), (0,2), (1,0), (1,1)]
+
+# Rotates a piece by 90 degrees
+def rotate_coords(coords):
+    return [(y, -x) for x, y in coords]
+
+# Returns a canonical coordinates representation of a piece as a frozen set
+def canonical_coords(coords):
+    x_min = min(x for x, _ in coords)
+    y_min = min(y for _, y in coords)
+    return frozenset((y - y_min, x - x_min) for x, y in coords)
+
+# Makes all possible variations of a piece (optionally including reflections)
+# as a set of canonical representations
+def make_piece_variations(piece, reflections=True):
+    variations = {canonical_coords(piece)}
+    for i in range(3):
+        piece = rotate_coords(piece)
+        variations.add(canonical_coords(piece))
+    if reflections:
+        piece_reflected = [(y, x) for x, y in piece]
+        variations.update(make_piece_variations(piece_reflected, False))
+    return variations
+
+# Generate all possible shapes
+L_SHAPES = [make_piece_variations(L_SHAPE)]
+I_SHAPES = [make_piece_variations(I_SHAPE)]
+T_SHAPES = [make_piece_variations(T_SHAPE)]
+S_SHAPES = [make_piece_variations(S_SHAPE)]
 
 class NuruominoState:
     state_id = 0
@@ -79,7 +89,7 @@ class Board:
         positions = list(zip(*np.where(self.board == region_id)))
         return positions
     
-    def place(self, shape: list[tuple[int, int]], origin: tuple[int, int], mark: int) -> 'Board':
+    def place(self, shape: list[tuple[int, int]], origin: tuple[int, int], mark) -> 'Board':
         """Retorna uma nova instância de Board com a peça colocada, marcada com `mark`."""
         new_board = np.copy(self.board)
         for dr, dc in shape:
@@ -117,7 +127,7 @@ class Board:
         for line in stdin.readlines():
             line_ar = [elem for elem in line.split()]
             board_list.append(line_ar)
-        board = np.array(board_list, np.int8)
+        board = np.array(board_list, dtype = 'U1')
 
         return Board(board)
 
@@ -135,20 +145,20 @@ class Nuruomino(Problem):
         for region_id in regions:
             region_cells = board.region_cells(region_id)
             for origin in region_cells:
-                for shape_group in [L_SHAPES, I_SHAPES, T_SHAPES, S_SHAPES]:
+                for shape_group, mark in zip(
+                    [L_SHAPES, I_SHAPES, T_SHAPES, S_SHAPES],
+                    ['L', 'I', 'T', 'S']
+                ):
                     for shape in shape_group:
                         if board.can_place(shape, origin, region_id):
-                            actions.append((region_id, shape, origin))
+                            actions.append((region_id, shape, origin, mark))
         return actions
 
-    def result(self, state: NuruominoState, action):
-        """Retorna o estado resultante de executar a 'action' sobre
-        'state' passado como argumento. A ação a executar deve ser uma
-        das presentes na lista obtida pela execução de
-        self.actions(state)."""
-
-        #TODO
-        pass 
+    def result(self, state: NuruominoState, action) -> NuruominoState:
+        """Retorna o estado resultante de executar a 'action' sobre 'state'."""
+        region_id, shape, origin, mark = action
+        new_board = state.board.place(shape, origin, mark)
+        return NuruominoState(new_board)
         
 
     def goal_test(self, state: NuruominoState):
@@ -164,6 +174,11 @@ class Nuruomino(Problem):
         pass
 
 if __name__ == "__main__":
+    print(L_SHAPES)
+    print(I_SHAPES)
+    print(T_SHAPES)
+    print(S_SHAPES)
+
     # Ler o tabuleiro do standard input e cria uma instância da classe Board
     problem_board = Board.parse_instance()
     
@@ -172,7 +187,3 @@ if __name__ == "__main__":
 
     # Criar o estado inicial do problema
     initial_state = NuruominoState(problem_board)
-
-    print("Ações possíveis:")
-    for region_id, shape, origin in problem.actions(initial_state):
-        print(f"Região {region_id}, forma {shape}, origem ({origin[0]}, {origin[1]})")
