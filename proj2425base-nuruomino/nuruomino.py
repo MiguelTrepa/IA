@@ -43,10 +43,10 @@ def make_piece_variations(piece, reflections=True):
     return variations
 
 # Generate all possible shapes
-L_SHAPES = [make_piece_variations(L_SHAPE)]
-I_SHAPES = [make_piece_variations(I_SHAPE)]
-T_SHAPES = [make_piece_variations(T_SHAPE)]
-S_SHAPES = [make_piece_variations(S_SHAPE)]
+L_SHAPES = make_piece_variations(L_SHAPE)
+I_SHAPES = make_piece_variations(I_SHAPE)
+T_SHAPES = make_piece_variations(T_SHAPE)
+S_SHAPES = make_piece_variations(S_SHAPE)
 
 
 from sys import stdin
@@ -180,11 +180,6 @@ class Nuruomino(Problem):
         pass
 
 if __name__ == "__main__":
-    print(L_SHAPES)
-    print(I_SHAPES)
-    print(T_SHAPES)
-    print(S_SHAPES)
-
     # Ler o tabuleiro do standard input e cria uma instância da classe Board
     problem_board = Board.parse_instance()
     
