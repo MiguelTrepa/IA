@@ -95,6 +95,38 @@ class Board:
                 return False # peça à direita igual
             if (c + 1 < self.board.shape[1] and self.board[r, c + 1] == mark):
                 return False # peça em baixo igual
+            if ((c + 1 < self.board.shape[1] and (self.board[r, c + 1] == 'L' or self.board[r, c + 1] == 'I'
+                    or self.board[r, c + 1] == 'T' or self.board[r, c + 1] == 'S')) 
+                    and (r + 1 < self.board.shape[0] and (self.board[r + 1, c] == 'L'
+                    or self.board[r + 1, c] == 'I' or self.board[r + 1, c] == 'T'
+                    or self.board[r + 1, c] == 'S')) and (r + 1 < self.board.shape[0] and c + 1 < self.board.shape[1]
+                    and (self.board[r + 1, c + 1] == 'L' or self.board[r + 1, c + 1] == 'I'
+                    or self.board[r + 1, c + 1] == 'T' or self.board[r + 1, c + 1] == 'S'))):
+                return False # peça forma quadrado (canto superior esquerdo)
+            if ((c - 1 >= 0 and (self.board[r, c - 1] == 'L' or self.board[r, c - 1] == 'I'
+                    or self.board[r, c - 1] == 'T' or self.board[r, c - 1] == 'S')) 
+                    and (r + 1 < self.board.shape[0] and (self.board[r + 1, c] == 'L'
+                    or self.board[r + 1, c] == 'I' or self.board[r + 1, c] == 'T'
+                    or self.board[r + 1, c] == 'S')) and (r + 1 < self.board.shape[0] and c - 1 >= 0
+                    and (self.board[r + 1, c - 1] == 'L' or self.board[r + 1, c - 1] == 'I'
+                    or self.board[r + 1, c - 1] == 'T' or self.board[r + 1, c - 1] == 'S'))):
+                return False # peça forma quadrado (canto superior direito)
+            if ((c + 1 < self.board.shape[1] and (self.board[r, c + 1] == 'L' or self.board[r, c + 1] == 'I'
+                    or self.board[r, c + 1] == 'T' or self.board[r, c + 1] == 'S')) 
+                    and (r - 1 >= 0 and (self.board[r - 1, c] == 'L'
+                    or self.board[r - 1, c] == 'I' or self.board[r - 1, c] == 'T'
+                    or self.board[r - 1, c] == 'S')) and (r - 1 >= 0 and c + 1 < self.board.shape[1]
+                    and (self.board[r - 1, c + 1] == 'L' or self.board[r - 1, c + 1] == 'I'
+                    or self.board[r - 1, c + 1] == 'T' or self.board[r - 1, c + 1] == 'S'))):
+                return False # peça forma quadrado (canto inferior esquerdo)
+            if ((c - 1 >= 0 and (self.board[r, c - 1] == 'L' or self.board[r, c - 1] == 'I'
+                    or self.board[r, c - 1] == 'T' or self.board[r, c - 1] == 'S')) 
+                    and (r - 1 >= 0 and (self.board[r - 1, c] == 'L'
+                    or self.board[r - 1, c] == 'I' or self.board[r - 1, c] == 'T'
+                    or self.board[r - 1, c] == 'S')) and (r - 1 >= 0 and c - 1 >= 0
+                    and (self.board[r - 1, c - 1] == 'L' or self.board[r - 1, c - 1] == 'I'
+                    or self.board[r - 1, c - 1] == 'T' or self.board[r - 1, c - 1] == 'S'))):
+                return False # peça forma quadrado (canto inferior direito)
         return True
 
     def region_cells(self, region_id: int) -> list[tuple[int, int]]:
@@ -201,8 +233,8 @@ if __name__ == "__main__":
     s2 = problem.result(s1,(np.str_('5'), frozenset({(1, 0), (2, 0), (0, 0), (3, 0)}), (np.int64(2), np.int64(5)), 'I'))
     s3 = problem.result(s2,(np.str_('4'), frozenset({(0, 1), (1, 0), (0, 2), (0, 0)}), (np.int64(4), np.int64(0)), 'L'))
     s4 = problem.result(s3,(np.str_('2'), frozenset({(0, 1), (1, 0), (1, 1), (2, 1)}), (np.int64(0), np.int64(2)), 'T'))
-    s5 = problem.result(s4, (np.str_('3'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(4)), 'L'))
+    #s5 = problem.result(s4, (np.str_('3'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(4)), 'L'))
     print(s3.board)
     print(s4.board)
-    print(s5.board)
-    print(problem.actions(s5))
+    #print(s5.board)
+    print(problem.actions(s4))
