@@ -68,10 +68,12 @@ class NuruominoState:
 
 class Board:
     """Representação interna de um tabuleiro do Puzzle Nuruomino."""
+    haspiece = []
     def __init__(self, board=np.array([1, 1], np.int8)):
         """Construtor da classe Board. Se o argumento for None, cria um tabuleiro vazio."""
         self.board = board
-    
+        for e in np.unique(board):
+            self.haspiece.append(False)
     def __str__(self):
         """Devolve uma representação textual do tabuleiro."""
         formatted_board = ""
@@ -81,6 +83,9 @@ class Board:
     
     def can_place(self, shape: list[tuple[int, int]], origin: tuple[int, int], region_id: int, mark: str) -> bool:
         """Verifica se é possível colocar a forma no tabuleiro a partir de `origin`, respeitando os limites da região."""
+        print(region_id)
+        if (self.haspiece[int(region_id) - 1]):
+            return False
         for dr, dc in shape:
             r, c = origin[0] + dr, origin[1] + dc
             if not (0 <= r < self.board.shape[0] and 0 <= c < self.board.shape[1]):
@@ -204,6 +209,7 @@ class Nuruomino(Problem):
         """Retorna o estado resultante de executar a 'action' sobre 'state'."""
         region_id, shape, origin, mark = action
         new_board = state.board.place(shape, origin, mark)
+        new_board.haspiece[int(region_id) - 1] = True
         return NuruominoState(new_board)
         
 
@@ -222,6 +228,8 @@ class Nuruomino(Problem):
 if __name__ == "__main__":
     # Ler o tabuleiro do standard input e cria uma instância da classe Board
     problem_board = Board.parse_instance()
+
+    print(problem_board.haspiece)
     
     print(problem_board)
     # Criar uma instância do problema
@@ -230,6 +238,7 @@ if __name__ == "__main__":
     # Criar o estado inicial do problema
     initial_state = NuruominoState(problem_board)
     s1 = problem.result(initial_state, (np.str_('1'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(0)), 'L'))
+    print(s1.board.haspiece)
     s2 = problem.result(s1,(np.str_('5'), frozenset({(1, 0), (2, 0), (0, 0), (3, 0)}), (np.int64(2), np.int64(5)), 'I'))
     s3 = problem.result(s2,(np.str_('4'), frozenset({(0, 1), (1, 0), (0, 2), (0, 0)}), (np.int64(4), np.int64(0)), 'L'))
     s4 = problem.result(s3,(np.str_('2'), frozenset({(0, 1), (1, 0), (1, 1), (2, 1)}), (np.int64(0), np.int64(2)), 'T'))
