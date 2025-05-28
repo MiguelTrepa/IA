@@ -10,6 +10,7 @@
 from sys import stdin
 import numpy as np
 from search import Problem, Node
+from copy import deepcopy
 
 # Each shape is a list of (row, col) offsets from the origin (0, 0)
 L_SHAPE = [(0,0), (1,0), (2,0), (2,1)]
@@ -68,12 +69,20 @@ class NuruominoState:
 
 class Board:
     """Representação interna de um tabuleiro do Puzzle Nuruomino."""
-    haspiece = []
-    def __init__(self, board=np.array([1, 1], np.int8)):
-        """Construtor da classe Board. Se o argumento for None, cria um tabuleiro vazio."""
+    def __init__(self, board=np.array([[1]], dtype=np.int8), haspiece=np.array([1], dtype=np.bool)):
         self.board = board
-        for e in np.unique(board):
-            self.haspiece.append(False)
+
+        if haspiece is None or len(haspiece) == 0:
+            unique_regions = np.unique(board)
+            # Converter os ids de região para inteiros, caso venham como strings
+            try:
+                region_count = max(int(x) for x in unique_regions)
+            except:
+                region_count = len(unique_regions)
+            self.haspiece = [np.bool(False)] * region_count
+        else:
+            self.haspiece = list(haspiece)
+
     def __str__(self):
         """Devolve uma representação textual do tabuleiro."""
         formatted_board = ""
@@ -83,7 +92,6 @@ class Board:
     
     def can_place(self, shape: list[tuple[int, int]], origin: tuple[int, int], region_id: int, mark: str) -> bool:
         """Verifica se é possível colocar a forma no tabuleiro a partir de `origin`, respeitando os limites da região."""
-        print(region_id)
         if (self.haspiece[int(region_id) - 1]):
             return False
         for dr, dc in shape:
@@ -145,7 +153,7 @@ class Board:
         for dr, dc in shape:
             r, c = origin[0] + dr, origin[1] + dc
             new_board[r, c] = mark
-        return Board(new_board)
+        return Board(new_board, np.copy(self.haspiece))
 
     def adjacent_regions(self, region:int) -> list:
         """Devolve uma lista das regiões que fazem fronteira com a região enviada no argumento."""
@@ -180,7 +188,7 @@ class Board:
             board_list.append(line_ar)
         board = np.array(board_list, dtype = 'U1')
 
-        return Board(board)
+        return Board(board, [])
 
     # TODO: outros metodos da classe Board
 
@@ -209,7 +217,7 @@ class Nuruomino(Problem):
         """Retorna o estado resultante de executar a 'action' sobre 'state'."""
         region_id, shape, origin, mark = action
         new_board = state.board.place(shape, origin, mark)
-        new_board.haspiece[int(region_id) - 1] = True
+        new_board.haspiece[int(region_id) - 1] = np.bool(True)
         return NuruominoState(new_board)
         
 
@@ -240,6 +248,7 @@ if __name__ == "__main__":
     s1 = problem.result(initial_state, (np.str_('1'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(0)), 'L'))
     print(s1.board.haspiece)
     s2 = problem.result(s1,(np.str_('5'), frozenset({(1, 0), (2, 0), (0, 0), (3, 0)}), (np.int64(2), np.int64(5)), 'I'))
+    print(s2.board.haspiece)
     s3 = problem.result(s2,(np.str_('4'), frozenset({(0, 1), (1, 0), (0, 2), (0, 0)}), (np.int64(4), np.int64(0)), 'L'))
     s4 = problem.result(s3,(np.str_('2'), frozenset({(0, 1), (1, 0), (1, 1), (2, 1)}), (np.int64(0), np.int64(2)), 'T'))
     #s5 = problem.result(s4, (np.str_('3'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(4)), 'L'))
