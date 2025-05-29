@@ -152,6 +152,8 @@ class Board:
                 frontier = True
         if frontier:
             return True
+        if not any(self.haspiece):
+            return True
         return False
 
     def region_cells(self, region_id: int) -> list[tuple[int, int]]:
@@ -271,7 +273,7 @@ if __name__ == "__main__":
     initial_state = NuruominoState(problem_board)
     s1 = problem.result(initial_state, (np.str_('1'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(0)), 'L'))
     print(s1.board)
-    print(problem.actions(s1))
+    print(problem.actions(initial_state))
     s2 = problem.result(s1,(np.str_('5'), frozenset({(1, 0), (2, 0), (0, 0), (3, 0)}), (np.int64(2), np.int64(5)), 'I'))
     #print(s2.board.haspiece)
     s3 = problem.result(s2,(np.str_('4'), frozenset({(0, 1), (1, 0), (0, 2), (0, 0)}), (np.int64(4), np.int64(0)), 'L'))
