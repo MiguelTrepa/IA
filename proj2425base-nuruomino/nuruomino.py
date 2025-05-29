@@ -230,8 +230,10 @@ class Nuruomino(Problem):
         """Retorna True se e só se o estado passado como argumento é
         um estado objetivo. Deve verificar se todas as posições do tabuleiro
         estão preenchidas de acordo com as regras do problema."""
-        #TODO
-        pass 
+        if len(self.actions(state)) == 0 and not(np.bool(False) in state.board.haspiece):
+            return True
+        else:
+            return False
 
     def h(self, node: Node):
         """Função heuristica utilizada para a procura A*."""
@@ -261,3 +263,4 @@ if __name__ == "__main__":
     print(s4.board)
     print(s5.board)
     print(problem.actions(s5))
+    print(problem.goal_test(s5))
