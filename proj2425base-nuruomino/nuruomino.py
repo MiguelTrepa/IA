@@ -9,7 +9,7 @@
 
 from sys import stdin
 import numpy as np
-from search import Problem, Node
+from search import Problem, Node, depth_first_tree_search
 from copy import deepcopy
 
 # Each shape is a list of (row, col) offsets from the origin (0, 0)
@@ -218,7 +218,7 @@ class Board:
 
 class Nuruomino(Problem):
     def __init__(self, board: Board):
-        self.state = NuruominoState(board)
+        super().__init__(NuruominoState(board))
 
     def actions(self, state: NuruominoState):
         """Gera todas as formas válidas de colocar uma peça no estado atual."""
@@ -265,23 +265,27 @@ if __name__ == "__main__":
 
     #print(problem_board.haspiece)
     
-    print(problem_board)
+    #print(problem_board)
     # Criar uma instância do problema
     problem = Nuruomino(problem_board)
 
     # Criar o estado inicial do problema
     initial_state = NuruominoState(problem_board)
-    s1 = problem.result(initial_state, (np.str_('1'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(0)), 'L'))
-    print(s1.board)
-    print(problem.actions(initial_state))
-    s2 = problem.result(s1,(np.str_('5'), frozenset({(1, 0), (2, 0), (0, 0), (3, 0)}), (np.int64(2), np.int64(5)), 'I'))
+    #s1 = problem.result(initial_state, (np.str_('1'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(0)), 'L'))
+    #print(s1.board)
+    #print(problem.actions(initial_state))
+    #s2 = problem.result(s1,(np.str_('5'), frozenset({(1, 0), (2, 0), (0, 0), (3, 0)}), (np.int64(2), np.int64(5)), 'I'))
     #print(s2.board.haspiece)
-    s3 = problem.result(s2,(np.str_('4'), frozenset({(0, 1), (1, 0), (0, 2), (0, 0)}), (np.int64(4), np.int64(0)), 'L'))
-    s4 = problem.result(s3,(np.str_('2'), frozenset({(0, 1), (1, 0), (1, 1), (2, 1)}), (np.int64(0), np.int64(2)), 'T'))
-    s5 = problem.result(s4, (np.str_('3'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(4)), 'L'))
+    #s3 = problem.result(s2,(np.str_('4'), frozenset({(0, 1), (1, 0), (0, 2), (0, 0)}), (np.int64(4), np.int64(0)), 'L'))
+    #s4 = problem.result(s3,(np.str_('2'), frozenset({(0, 1), (1, 0), (1, 1), (2, 1)}), (np.int64(0), np.int64(2)), 'T'))
+    #s5 = problem.result(s4, (np.str_('3'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(4)), 'L'))
     #print(s3.board)
     #print(s4.board)
     #print(s5.board)
     #print(s5.board.adjacent_values(1, 0))
     #print(problem.actions(s4))
     #print(problem.goal_test(s5))
+    result = depth_first_tree_search(problem)
+    if result is not None:
+        result = result.state
+        print(result.board)
