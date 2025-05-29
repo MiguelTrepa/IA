@@ -69,12 +69,12 @@ class NuruominoState:
 
 class Board:
     """Representação interna de um tabuleiro do Puzzle Nuruomino."""
-    def __init__(self, board=np.array([[1]], dtype=np.int8), haspiece=np.array([1], dtype=np.bool)):
+    def __init__(self, board=np.array([[1]], dtype=np.int8), haspiece=np.array([1], dtype=np.bool),
+                 regions=np.array([1], dtype=np.int8)):
         self.board = board
 
         if haspiece is None or len(haspiece) == 0:
             unique_regions = np.unique(board)
-            # Converter os ids de região para inteiros, caso venham como strings
             try:
                 region_count = max(int(x) for x in unique_regions)
             except:
@@ -82,6 +82,11 @@ class Board:
             self.haspiece = [np.bool(False)] * region_count
         else:
             self.haspiece = list(haspiece)
+
+        if regions is None or len(regions) == 0:
+            self.regions = np.unique(board)
+        else:
+            self.regions = list(regions)
 
     def __str__(self):
         """Devolve uma representação textual do tabuleiro."""
@@ -153,7 +158,7 @@ class Board:
         for dr, dc in shape:
             r, c = origin[0] + dr, origin[1] + dc
             new_board[r, c] = mark
-        return Board(new_board, np.copy(self.haspiece))
+        return Board(new_board, np.copy(self.haspiece), np.copy(self.regions))
 
     def adjacent_regions(self, region:int) -> list:
         """Devolve uma lista das regiões que fazem fronteira com a região enviada no argumento."""
@@ -188,7 +193,7 @@ class Board:
             board_list.append(line_ar)
         board = np.array(board_list, dtype = 'U1')
 
-        return Board(board, [])
+        return Board(board, [], [])
 
     # TODO: outros metodos da classe Board
 
@@ -200,7 +205,7 @@ class Nuruomino(Problem):
         """Gera todas as formas válidas de colocar uma peça no estado atual."""
         actions = []
         board = state.board
-        regions = np.unique(board.board)
+        regions = board.regions
         for region_id in regions:
             region_cells = board.region_cells(region_id)
             for origin in region_cells:
@@ -251,8 +256,8 @@ if __name__ == "__main__":
     print(s2.board.haspiece)
     s3 = problem.result(s2,(np.str_('4'), frozenset({(0, 1), (1, 0), (0, 2), (0, 0)}), (np.int64(4), np.int64(0)), 'L'))
     s4 = problem.result(s3,(np.str_('2'), frozenset({(0, 1), (1, 0), (1, 1), (2, 1)}), (np.int64(0), np.int64(2)), 'T'))
-    #s5 = problem.result(s4, (np.str_('3'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(4)), 'L'))
+    s5 = problem.result(s4, (np.str_('3'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(4)), 'L'))
     print(s3.board)
     print(s4.board)
-    #print(s5.board)
-    print(problem.actions(s4))
+    print(s5.board)
+    print(problem.actions(s5))
