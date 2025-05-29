@@ -98,6 +98,7 @@ class Board:
     def can_place(self, shape: list[tuple[int, int]], origin: tuple[int, int], region_id: int, mark: str) -> bool:
         """Verifica se é possível colocar a forma no tabuleiro a partir de `origin`, respeitando os limites da região."""
         frontier = False
+        marks = np.array(['L', 'I', 'T', 'S'])
         if (self.haspiece[int(region_id) - 1]):
             return False
         for dr, dc in shape:
@@ -146,7 +147,12 @@ class Board:
                     and (self.board[r - 1, c - 1] == 'L' or self.board[r - 1, c - 1] == 'I'
                     or self.board[r - 1, c - 1] == 'T' or self.board[r - 1, c - 1] == 'S'))):
                 return False # peça forma quadrado (canto inferior direito)
-        return True
+            adj_values = self.adjacent_values(r, c, False)
+            if any(val in marks for val in adj_values):
+                frontier = True
+        if frontier:
+            return True
+        return False
 
     def region_cells(self, region_id: int) -> list[tuple[int, int]]:
         """Devolve a lista de posições (row, col) pertencentes a uma região."""
@@ -171,18 +177,20 @@ class Board:
         #TODO
         pass
 
-    def adjacent_values(self, row:int, col:int) -> list:
+    def adjacent_values(self, row:int, col:int, diag: bool) -> list:
         """Devolve os valores das celulas adjacentes à posição, em todas as direções, incluindo diagonais.
         Formato: [LeftTopDiag, , Top, RightTopDiag, Left, Right, , BottomLeftDiag, Bottom, BottomRightDiag]"""
         values = np.array([])
-        directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1),  (1, 0),  (1, 1)]
+        if diag:
+            directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1),  (1, 0),  (1, 1)]
+        else:
+            directions = [(-1, 0), (0, -1), (0, 1), (1, 0)]
         for dr, dc in directions:
             r, c = row + dr, col + dc
             if 0 <= r < self.board.shape[0] and 0 <= c < self.board.shape[1]:
                 values = np.append(values, self.board[r][c])
-            else:
-                values = np.append(values, '')
         return values
+    
     
     @staticmethod
     def parse_instance() -> 'Board':
@@ -253,7 +261,7 @@ if __name__ == "__main__":
     # Ler o tabuleiro do standard input e cria uma instância da classe Board
     problem_board = Board.parse_instance()
 
-    print(problem_board.haspiece)
+    #print(problem_board.haspiece)
     
     print(problem_board)
     # Criar uma instância do problema
@@ -262,15 +270,16 @@ if __name__ == "__main__":
     # Criar o estado inicial do problema
     initial_state = NuruominoState(problem_board)
     s1 = problem.result(initial_state, (np.str_('1'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(0)), 'L'))
-    print(s1.board.haspiece)
+    print(s1.board)
+    print(problem.actions(s1))
     s2 = problem.result(s1,(np.str_('5'), frozenset({(1, 0), (2, 0), (0, 0), (3, 0)}), (np.int64(2), np.int64(5)), 'I'))
-    print(s2.board.haspiece)
+    #print(s2.board.haspiece)
     s3 = problem.result(s2,(np.str_('4'), frozenset({(0, 1), (1, 0), (0, 2), (0, 0)}), (np.int64(4), np.int64(0)), 'L'))
     s4 = problem.result(s3,(np.str_('2'), frozenset({(0, 1), (1, 0), (1, 1), (2, 1)}), (np.int64(0), np.int64(2)), 'T'))
     s5 = problem.result(s4, (np.str_('3'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(4)), 'L'))
-    print(s3.board)
-    print(s4.board)
-    print(s5.board)
-    print(s5.board.adjacent_values(1, 0))
-    print(problem.actions(s5))
-    print(problem.goal_test(s5))
+    #print(s3.board)
+    #print(s4.board)
+    #print(s5.board)
+    #print(s5.board.adjacent_values(1, 0))
+    #print(problem.actions(s4))
+    #print(problem.goal_test(s5))
