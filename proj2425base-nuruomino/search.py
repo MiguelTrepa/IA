@@ -194,7 +194,7 @@ def breadth_first_tree_search(problem):
     return None
 
 
-def depth_first_tree_search(problem):
+def depth_first_tree_search(problem: Problem):
     """
     [Figure 3.7]
     Search the deepest nodes in the search tree first.

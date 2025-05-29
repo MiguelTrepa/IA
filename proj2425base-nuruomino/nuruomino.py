@@ -10,7 +10,6 @@
 from sys import stdin
 import numpy as np
 from search import Problem, Node, depth_first_tree_search
-from copy import deepcopy
 
 # Each shape is a list of (row, col) offsets from the origin (0, 0)
 L_SHAPE = [(0,0), (1,0), (2,0), (2,1)]
@@ -20,6 +19,8 @@ I_SHAPE = [(0,0), (1,0), (2,0), (3,0)]
 T_SHAPE = [(0,0), (0,1), (0,2), (1,1)]
 
 S_SHAPE = [(0,1), (0,2), (1,0), (1,1)]
+
+O_SHAPE = [(0,0), (0,1), (1,0), (1,1)] # never placed, used for testing a wrong placement
 
 # Rotates a piece by 90 degrees
 def rotate_coords(coords):
@@ -48,11 +49,6 @@ L_SHAPES = make_piece_variations(L_SHAPE)
 I_SHAPES = make_piece_variations(I_SHAPE)
 T_SHAPES = make_piece_variations(T_SHAPE)
 S_SHAPES = make_piece_variations(S_SHAPE)
-
-
-from sys import stdin
-import numpy as np
-from search import Problem, Node
 
 class NuruominoState:
     state_id = 0
@@ -155,6 +151,48 @@ class Board:
         if not any(self.haspiece):
             return True
         return False
+    
+    def new_can_place(self, shape: list[tuple[int, int]], origin: tuple[int, int], region_id: int, mark: str) -> bool:
+        """Verifica se é possível colocar a forma no tabuleiro a partir de `origin`, respeitando os limites da região."""
+
+        # Check if region already has a piece
+        if self.haspiece[int(region_id) - 1]:
+            return False
+        
+        # Get all positions the shape would occupy
+        positions = [(origin[0] + dr, origin[1] + dc) for dr, dc in shape]
+
+        # Check if all positions are inside the board and in the correct region
+        for r, c in positions:
+            if not (0 <= r < self.board.shape[0] and 0 <= c < self.board.shape[1]):
+                return False
+            if self.board[r, c] != region_id:
+                return False
+
+        # Check for adjacency and mark constraints
+        marks = np.array(['L', 'I', 'T', 'S'])
+        frontier = False
+        for r, c in positions:
+            adj_values = self.adjacent_values(r, c, False)
+            if any(val in marks for val in adj_values):
+                frontier = True
+
+        # Generate the grander region (region + adjacent positions)
+        grander_region = set(self.adjacent_positions(positions[0][0], positions[0][1], diag=False, grand_region=True))
+
+        # Check for O_SHAPE (2x2 square) anywhere in the grander region
+        for gr, gc in grander_region:
+            square = {(gr + dr, gc + dc) for dr, dc in O_SHAPE}
+            if square.issubset(grander_region):
+                # Only fail if all 4 cells are part of the piece being placed
+                if square.issubset(set(positions)):
+                    return False
+
+        if frontier:
+            return True
+        if not any(self.haspiece):
+            return True
+        return False
 
     def region_cells(self, region_id: int) -> list[tuple[int, int]]:
         """Devolve a lista de posições (row, col) pertencentes a uma região."""
@@ -169,30 +207,73 @@ class Board:
             new_board[r, c] = mark
         return Board(new_board, np.copy(self.haspiece), np.copy(self.regions))
 
-    def adjacent_regions(self, region:int) -> list:
+    def adjacent_regions(self, region:int, diag: bool) -> list:
         """Devolve uma lista das regiões que fazem fronteira com a região enviada no argumento."""
-        #TODO
-        pass
+        regions = set()
+        
+        adjacent_cells = self.adjacent_positions(*self.region_cells(region)[0], diag)
+
+        for r, c in adjacent_cells:
+            if self.board[r, c] != region:
+                regions.add(self.board[r, c])
+        
+        return list(regions)
     
-    def adjacent_positions(self, row:int, col:int) -> list:
-        """Devolve as posições adjacentes à região, em todas as direções, incluindo diagonais."""
-        #TODO
-        pass
+    def adjacent_positions(self, row:int, col:int, diag: bool, grand_region: bool = False) -> list:
+        """
+        Devolve as posições adjacentes à região, em todas as direções, incluindo diagonais.
+        Se grand_region for True, devolve a região combinada com as posições adjacentes.
+        A ordem das posições segue a ordem de leitura do tabuleiro (linha a linha, esquerda para direita).
+        """
+        adjacent = set()
+        rows, cols = self.board.shape
+
+        if diag:
+            directions = [  (-1, -1),   (-1, 0),    (-1, 1),
+                            (0, -1),                (0, 1),
+                            (1, -1),    (1, 0),     (1, 1)  ]
+        else:
+            directions = [(-1, 0), (0, -1), (0, 1), (1, 0)]
+
+        region = self.board[row, col]
+        region_cells = self.region_cells(region)
+
+        for r, c in region_cells: 
+            for dr, dc in directions:
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < rows and 0 <= nc < cols:
+                    if self.board[nr, nc] != region:
+                        adjacent.add((nr, nc))
+
+        # To preserve board order, sort by (row, col)
+        region_cells_sorted = sorted(region_cells)
+        adjacent_sorted = sorted(adjacent)
+
+        if grand_region:
+            # Combine and sort all positions by (row, col)
+            combined = sorted(set(region_cells_sorted) | set(adjacent_sorted))
+            return combined
+        else:
+            return adjacent_sorted
 
     def adjacent_values(self, row:int, col:int, diag: bool) -> list:
         """Devolve os valores das celulas adjacentes à posição, em todas as direções, incluindo diagonais.
         Formato: [LeftTopDiag, , Top, RightTopDiag, Left, Right, , BottomLeftDiag, Bottom, BottomRightDiag]"""
         values = np.array([])
+
         if diag:
-            directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1),  (1, 0),  (1, 1)]
+            directions = [  (-1, -1),   (-1, 0),    (-1, 1),
+                            (0, -1),                (0, 1),
+                            (1, -1),    (1, 0),     (1, 1)  ]
         else:
             directions = [(-1, 0), (0, -1), (0, 1), (1, 0)]
+
         for dr, dc in directions:
             r, c = row + dr, col + dc
             if 0 <= r < self.board.shape[0] and 0 <= c < self.board.shape[1]:
                 values = np.append(values, self.board[r][c])
+
         return values
-    
     
     @staticmethod
     def parse_instance() -> 'Board':
@@ -285,7 +366,9 @@ if __name__ == "__main__":
     #print(s5.board.adjacent_values(1, 0))
     #print(problem.actions(s4))
     #print(problem.goal_test(s5))
-    result = depth_first_tree_search(problem)
-    if result is not None:
-        result = result.state
-        print(result.board)
+    # result = depth_first_tree_search(problem)
+    # if result is not None:
+    #     result = result.state
+    #     print(result.board)
+    # else:
+    #     print("No solution found.")
