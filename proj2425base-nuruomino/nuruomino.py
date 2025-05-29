@@ -97,6 +97,7 @@ class Board:
     
     def can_place(self, shape: list[tuple[int, int]], origin: tuple[int, int], region_id: int, mark: str) -> bool:
         """Verifica se é possível colocar a forma no tabuleiro a partir de `origin`, respeitando os limites da região."""
+        frontier = False
         if (self.haspiece[int(region_id) - 1]):
             return False
         for dr, dc in shape:
@@ -171,9 +172,17 @@ class Board:
         pass
 
     def adjacent_values(self, row:int, col:int) -> list:
-        """Devolve os valores das celulas adjacentes à região, em todas as direções, incluindo diagonais."""
-        #TODO
-        pass
+        """Devolve os valores das celulas adjacentes à posição, em todas as direções, incluindo diagonais.
+        Formato: [LeftTopDiag, , Top, RightTopDiag, Left, Right, , BottomLeftDiag, Bottom, BottomRightDiag]"""
+        values = np.array([])
+        directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1),  (1, 0),  (1, 1)]
+        for dr, dc in directions:
+            r, c = row + dr, col + dc
+            if 0 <= r < self.board.shape[0] and 0 <= c < self.board.shape[1]:
+                values = np.append(values, self.board[r][c])
+            else:
+                values = np.append(values, '')
+        return values
     
     @staticmethod
     def parse_instance() -> 'Board':
@@ -262,5 +271,6 @@ if __name__ == "__main__":
     print(s3.board)
     print(s4.board)
     print(s5.board)
+    print(s5.board.adjacent_values(1, 0))
     print(problem.actions(s5))
     print(problem.goal_test(s5))
