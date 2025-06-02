@@ -208,6 +208,18 @@ class Board:
         if all(cell in board.regions[board.region_at(origin[0], origin[1])] for cell in placed):
             return True
         return False
+    
+    def has_border(self, origin: tuple[int, int], shape: list[tuple[int, int]]) -> bool:
+        """
+        Verifica se a peça tem uma fronteira com outra região.
+        Retorna True se a peça tiver uma fronteira com outra região.
+        """
+        region = self.region_at(origin[0], origin[1])
+        placed_cells = [(origin[0] + dr, origin[1] + dc) for dr, dc in shape]
+        adjacent_labels = self.piece_adjacent_positions(origin, shape)
+        if any(self.region_at(r, c) != region for r, c in adjacent_labels):
+            return True
+        return False
 
     def equal_adjacent(self, origin: tuple[int, int], shape: list[tuple[int, int]], piece_label: str) -> bool:
         """
@@ -219,7 +231,7 @@ class Board:
 
         return piece_label in adjacent_labels
     
-    def makes_2x2(self, origin: tuple[int, int], shape: list[tuple[int, int]], piece_label: str = 'X') -> bool:
+    def makes_2x2(self, origin: tuple[int, int], shape: list[tuple[int, int]]) -> bool:
         """
         Verifica se a colocação da peça na posição origin forma um quadrado 2x2,
         considerando tanto a peça quanto as células adjacentes a ela.
@@ -229,14 +241,14 @@ class Board:
         # Marca as posições da peça com piece_label
         for dr, dc in shape:
             r, c = origin[0] + dr, origin[1] + dc
-            temp_board[r, c] = piece_label
+            temp_board[r, c] = 'L'
 
         # Define área relevante para verificar 2x2
         piece = set([(origin[0] + dr, origin[1] + dc) for dr, dc in shape])
         surrounds = set(self.piece_adjacent_positions(origin, shape, diag=True))
         greater_area = piece | surrounds
 
-        marks = {'L', 'I', 'T', 'S', piece_label}
+        marks = {'L', 'I', 'T', 'S'}
         for r, c in greater_area:
             # Verifica se é possível formar um quadrado 2x2 a partir de (r, c)
             if r + 1 < self.height and c + 1 < self.width:
@@ -253,19 +265,18 @@ class Board:
         region_label = self.region_at(origin[0], origin[1])
         if self.is_region_filled(region_label):
             return False
-
         # Verifica se a peça cabe na região
         if not self.fits(origin, shape):
             return False
-        
+        # Verifica se a peça tem uma fronteira com outra região
+        if not self.has_border(origin, shape):
+            return False
         # Verifica se a peça não tem uma peça igual adjacente
         if self.equal_adjacent(origin, shape, piece_label):
             return False
-        
         # Verifica se a colocação da peça não forma um quadrado 2x2
         if self.makes_2x2(origin, shape):
             return False
-
         return True
 
 class CSP:
@@ -342,6 +353,7 @@ if __name__ == "__main__":
     print("Domínios das regiões:")
     for region, options in csp.domains.items():
         print(f"{region}: {options}")
+        print(f"  Opções válidas: {len(options)}")
     
     # Criação do estado inicial
     initial_state = NuruominoState(board)
