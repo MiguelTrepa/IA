@@ -20,8 +20,6 @@ T_SHAPE = [(0,0), (0,1), (0,2), (1,1)]
 
 S_SHAPE = [(0,1), (0,2), (1,0), (1,1)]
 
-O_SHAPE = [(0,0), (0,1), (1,0), (1,1)] # never placed, used for testing a wrong placement
-
 # Rotates a piece by 90 degrees
 def rotate_coords(coords):
     return [(y, -x) for x, y in coords]
@@ -58,15 +56,21 @@ class NuruominoState:
         self.id = NuruominoState.state_id
         NuruominoState.state_id += 1
 
-    def __lt__(self, other):
+    def __lt__(self, other: 'NuruominoState') -> bool:
         """ Este método é utilizado em caso de empate na gestão da lista
         de abertos nas procuras informadas. """
         return self.id < other.id
 
 class Board:
-    """Representação interna de um tabuleiro do Puzzle Nuruomino."""
-    def __init__(self, board=np.array([[1]], dtype=np.int8), haspiece=np.array([1], dtype=np.bool),
-                 regions=np.array([1], dtype=np.int8)):
+    """
+    Representação interna de um tabuleiro do Puzzle Nuruomino.
+
+    Args:
+        board (np.ndarray): A matriz com identificadores de regiões.
+        haspiece (list[bool]): Flags indicando se cada região já tem uma peça.
+        regions (list[str]): Lista das regiões presentes.
+    """
+    def __init__(self, board=np.array([[1]], dtype=np.int8), haspiece=np.array([1], dtype=np.bool), regions=np.array([1], dtype=np.int8)):
         self.board = board
 
         if haspiece is None or len(haspiece) == 0:
@@ -162,20 +166,13 @@ class Board:
         # Get all positions the shape would occupy
         positions = [(origin[0] + dr, origin[1] + dc) for dr, dc in shape]
 
+
         # Check if all positions are inside the board and in the correct region
         for r, c in positions:
             if not (0 <= r < self.board.shape[0] and 0 <= c < self.board.shape[1]):
                 return False
             if self.board[r, c] != region_id:
                 return False
-
-        # Check for adjacency and mark constraints
-        marks = np.array(['L', 'I', 'T', 'S'])
-        frontier = False
-        for r, c in positions:
-            adj_values = self.adjacent_values(r, c, False)
-            if any(val in marks for val in adj_values):
-                frontier = True
 
         # Generate the grander region (region + adjacent positions)
         grander_region = set(self.adjacent_positions(positions[0][0], positions[0][1], diag=False, grand_region=True))
@@ -188,8 +185,6 @@ class Board:
                 if square.issubset(set(positions)):
                     return False
 
-        if frontier:
-            return True
         if not any(self.haspiece):
             return True
         return False
@@ -275,16 +270,19 @@ class Board:
 
         return values
     
+    def adjacent_positions_shape(shape: list[tuple[int, int]], origin: tuple[int, int]) -> list:
+        """Devolve as posições adjacentes à forma colocada no tabuleiro a partir de `origin`."""
+        adjacent = set()
+        for dr, dc in shape:
+            r, c = origin[0] + dr, origin[1] + dc
+            adjacent.update(self.adjacent_positions(r, c, diag=True))
+        return sorted(adjacent)
+
     @staticmethod
     def parse_instance() -> 'Board':
-        """Lê o test do standard input (stdin) que é passado como argumento
+        """
+        Lê o test do standard input (stdin) que é passado como argumento
         e retorna uma instância da classe Board.
-
-        Por exemplo:
-            $ python3 pipe.py < test-01.txt
-
-            > from sys import stdin
-            > line = stdin.readline().split()
         """
         board_list = []
 
@@ -294,8 +292,6 @@ class Board:
         board = np.array(board_list, dtype = 'U1')
 
         return Board(board, [], [])
-
-    # TODO: outros metodos da classe Board
 
 class Nuruomino(Problem):
     def __init__(self, board: Board):
