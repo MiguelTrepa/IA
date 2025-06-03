@@ -29,10 +29,10 @@ PIECES = {
         [(0,0), (0,1), (0,2), (0,3)]
     ],
     'T': [
-        [(0,0), (0,1), (0,2), (1,1)], 
-        [(0,1), (1,0), (1,1), (2,1)],
-        [(1,0), (1,1), (1,2), (0,1)],
-        [(0,0), (1,0), (2,0), (1,1)]
+        [(-1, 0), (0, -1), (0, 0), (0, 1)],
+        [(0, -1), (0, 0), (1, 0), (-1, 0)],
+        [(1, 0), (0, -1), (0, 0), (0, 1)],
+        [(0, 1), (0, 0), (1, 0), (-1, 0)]
     ],
     'S': [
         [(0,1), (0,2), (1,0), (1,1)],
@@ -46,13 +46,14 @@ class Board:
     """
     Representação interna de um tabuleiro do Puzzle Nuruomino.
     """
-    def __init__(self, board = None):
+    def __init__(self, board = None, connected_regions = None):
         if board is None:
             board = Board.parse_instance()
         self.board = board
         self.height, self.width = self.board.shape
         self.regions = self._extract_regions()
         self.neighbors = self._find_neighbors()
+        self.connected_regions = connected_regions if connected_regions is not None else defaultdict(set)
     
     def _extract_regions(self):
         """
@@ -282,13 +283,41 @@ class Board:
         if self.makes_2x2(origin, shape):
             return False
         return True
+
     def place(self, shape: list[tuple[int, int]], origin: tuple[int, int], mark) -> 'Board':
         """Retorna uma nova instância de Board com a peça colocada, marcada com `mark`."""
         new_board = np.copy(self.board)
+        region = self.region_at(origin[0], origin[1])
+
         for dr, dc in shape:
             r, c = origin[0] + dr, origin[1] + dc
             new_board[r, c] = mark
+        
+        adjacent_positions = self.piece_adjacent_positions(origin, shape)
+        for pos in adjacent_positions:
+            if pos not in self.connected_regions[region]:
+                if self.board[pos[0], pos[1]] in {'L', 'I', 'T', 'S'}:
+                    neighbor = self.region_at(pos[0], pos[1])
+                    if neighbor != region:
+                        self.connected_regions[region].add(neighbor)
+                        self.connected_regions[neighbor].add(region)
+
         return Board(new_board)
+    
+    def remove(self, shape: list[tuple[int, int]], origin: tuple[int, int]) -> 'Board':
+        """Retorna uma nova instância de Board com a peça removida da posição origin."""
+        new_board = np.copy(self.board)
+        for dr, dc in shape:
+            r, c = origin[0] + dr, origin[1] + dc
+            new_board[r, c] = self.region_at(r, c)
+
+        # Remove as conexões da região
+        region = self.region_at(origin[0], origin[1])
+        if region in self.connected_regions:
+            for neighbor in self.connected_regions[region]:
+                if neighbor in self.connected_regions:
+                    self.connected_regions[neighbor].discard(region)
+            del self.connected_regions[region]
 
 class CSP:
     def __init__(self, board: Board):
@@ -296,7 +325,7 @@ class CSP:
         self.variables = list(board.regions.keys())
         self.domains = self._compute_domains()
 
-    def _compute_domains(self):
+    def compute_domains(self):
         domains = {region: self._generate_options(region, cells) for region, cells in self.board.regions.items()}
         return domains
 
@@ -370,7 +399,7 @@ if __name__ == "__main__":
     # Exemplo de uso
     board = Board.parse_instance()
     print("Tabuleiro lido:")
-    print(board.board)
+    print(board)
 
     csp = CSP(board)
     print("Regiões extraídas:")
@@ -391,11 +420,7 @@ if __name__ == "__main__":
     
     # Exemplo de criação do problema
     problem = Nuruomino(board, csp)
-    print(problem.actions(initial_state))
-    s1 = problem.result(initial_state, (np.str_('1'), ('L', [(0, 0), (0, 1), (1, 0), (2, 0)], (0, 0))))
-    print(s1.board)
-    print(problem.actions(s1))
     
     # Exemplo de busca (ainda não implementada)
-    # solution = depth_first_tree_search(problem)
-    # print("Solução encontrada:", solution)
+    solution = depth_first_tree_search(problem)
+    print("Solução encontrada:", solution)
