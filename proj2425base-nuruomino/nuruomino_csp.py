@@ -93,6 +93,13 @@ class Board:
 
         return Board(board)
 
+    def __str__(self):
+        """Devolve uma representação textual do tabuleiro."""
+        formatted_board = ""
+        for row in self.board:
+            formatted_board += "\t".join(str(cell) for cell in row) + "\n"
+        return formatted_board
+    
     def region_at(self, r: int, c: int) -> str:
         """
         Retorna o símbolo da região na posição (r, c) do tabuleiro.
@@ -275,16 +282,14 @@ class Board:
         if self.makes_2x2(origin, shape):
             return False
         return True
-    
-    def place(self, origin: tuple[int, int], shape: list[tuple[int, int]], piece_label: str):
-        """
-        Coloca a peça no tabuleiro na posição origin.
-        """
+    def place(self, shape: list[tuple[int, int]], origin: tuple[int, int], mark) -> 'Board':
+        """Retorna uma nova instância de Board com a peça colocada, marcada com `mark`."""
+        new_board = np.copy(self.board)
         for dr, dc in shape:
             r, c = origin[0] + dr, origin[1] + dc
-            self.board[r, c] = piece_label
-        region = self.region_at(origin[0], origin[1])
-        neighbors = self.neighbors[region]
+            new_board[r, c] = mark
+        return Board(new_board)
+
 class CSP:
     def __init__(self, board: Board):
         self.board = board
@@ -330,16 +335,29 @@ class NuruominoState:
         return self.id < other.id
     
 class Nuruomino(Problem):
-    def __init__(self, board: Board):
-        pass
+    def __init__(self, board: Board, csp: CSP):
+        super().__init__(NuruominoState(board))
+        self.csp = csp
 
     def actions(self, state: NuruominoState):
         """Gera todas as formas válidas de colocar uma peça no estado atual."""
-        pass
+        actions = []
+        board = state.board
+        for region, cells in board.regions.items():
+            if board.is_region_filled(region):
+                continue
+            for origin in cells:
+                for piece, shapes in PIECES.items():
+                    for shape in shapes:
+                        if board.is_valid(origin, shape, piece):
+                            actions.append((region, (piece, shape, origin)))
+        return actions
 
     def result(self, state: NuruominoState, action) -> NuruominoState:
         """Retorna o estado resultante de executar a 'action' sobre 'state'."""
-        pass
+        region_id, (mark, shape, origin) = action
+        new_board = state.board.place(shape, origin, mark)
+        return NuruominoState(new_board)
         
 
     def goal_test(self, state: NuruominoState):
@@ -372,7 +390,11 @@ if __name__ == "__main__":
     initial_state = NuruominoState(board)
     
     # Exemplo de criação do problema
-    problem = Nuruomino(board)
+    problem = Nuruomino(board, csp)
+    print(problem.actions(initial_state))
+    s1 = problem.result(initial_state, (np.str_('1'), ('L', [(0, 0), (0, 1), (1, 0), (2, 0)], (0, 0))))
+    print(s1.board)
+    print(problem.actions(s1))
     
     # Exemplo de busca (ainda não implementada)
     # solution = depth_first_tree_search(problem)
