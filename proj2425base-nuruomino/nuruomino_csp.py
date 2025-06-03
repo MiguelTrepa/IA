@@ -202,7 +202,7 @@ class Board:
 
     def fits(self, origin:tuple[int, int], shape: list[tuple[int, int]]) -> bool:
         """
-        Testa se a peça pode ser colocada no tabuleiro na posição origin
+        Testa se a peça pode ser colocada no tabuleiro na região especificada por origin.
         """
         placed = [(origin[0] + dx, origin[1] + dy) for dx, dy in shape]
         if all(cell in board.regions[board.region_at(origin[0], origin[1])] for cell in placed):
@@ -215,7 +215,6 @@ class Board:
         Retorna True se a peça tiver uma fronteira com outra região.
         """
         region = self.region_at(origin[0], origin[1])
-        placed_cells = [(origin[0] + dr, origin[1] + dc) for dr, dc in shape]
         adjacent_labels = self.piece_adjacent_positions(origin, shape)
         if any(self.region_at(r, c) != region for r, c in adjacent_labels):
             return True
@@ -226,9 +225,7 @@ class Board:
         Verifica se uma peça pode ser colocada sem ter uma peça igual adjacente a ela.
         Retorna True se a peça não puder ser colocada
         """
-        placed_cells = [(origin[0] + dr, origin[1] + dc) for dr, dc in shape]
         adjacent_labels = self.piece_adjacent_values(origin, shape)
-
         return piece_label in adjacent_labels
     
     def makes_2x2(self, origin: tuple[int, int], shape: list[tuple[int, int]]) -> bool:
@@ -252,8 +249,8 @@ class Board:
         for r, c in greater_area:
             # Verifica se é possível formar um quadrado 2x2 a partir de (r, c)
             if r + 1 < self.height and c + 1 < self.width:
-                block = {temp_board[r + dr, c + dc] for dr, dc in [(0, 0), (0, 1), (1, 0), (1, 1)]}
-                if all(mark in marks for mark in block):
+                O_SHAPE = {temp_board[r + dr, c + dc] for dr, dc in [(0, 0), (0, 1), (1, 0), (1, 1)]}
+                if all(mark in marks for mark in O_SHAPE):
                     return True
         return False
     
@@ -278,7 +275,16 @@ class Board:
         if self.makes_2x2(origin, shape):
             return False
         return True
-
+    
+    def place(self, origin: tuple[int, int], shape: list[tuple[int, int]], piece_label: str):
+        """
+        Coloca a peça no tabuleiro na posição origin.
+        """
+        for dr, dc in shape:
+            r, c = origin[0] + dr, origin[1] + dc
+            self.board[r, c] = piece_label
+        region = self.region_at(origin[0], origin[1])
+        neighbors = self.neighbors[region]
 class CSP:
     def __init__(self, board: Board):
         self.board = board
@@ -302,6 +308,13 @@ class CSP:
                 if self.board.is_valid(origin, shape, piece):
                     valid_options.append((piece, shape, origin))
         return valid_options
+    
+    def backtracking_search(self, assignment=None):
+
+        pass
+
+    def forward_checking(self):
+        pass
 
 class NuruominoState:
     state_id = 0
