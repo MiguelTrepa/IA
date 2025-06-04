@@ -420,8 +420,8 @@ class Nuruomino(Problem):
         return NuruominoState(new_board)
 
     def goal_test(self, state: NuruominoState):
-        board = state.board
-        return board.all_regions_connected()
+        all_filled = all(board.is_region_filled(region) for region in board.regions)
+        return all_filled
 
 if __name__ == "__main__":
     # Exemplo de uso
