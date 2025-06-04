@@ -53,7 +53,7 @@ class Board:
         self.height, self.width = self.board.shape
         self.regions = self._extract_regions()
         self.neighbors = self._find_neighbors()
-        self.connected_regions = connected_regions if connected_regions is not None else defaultdict(set)
+        self.connected_regions = connected_regions if connected_regions is not None else []
     
     def _extract_regions(self):
         """
@@ -109,6 +109,33 @@ class Board:
             key = [key for key, value in self.regions.items() if (r, c) in value]
             return key[0]
         return None
+    
+    def group_at(self, region: str) -> list:
+        """
+        Retorna a lista de posições (tuplas) que pertencem à região especificada.
+        """
+        for group in self.connected_regions:
+            if region in group:
+                return group
+        return None
+    
+    def connect_groups(self, region_a: str, region_b: str):
+        """
+        Conecta duas regiões no dicionário de regiões conectadas.
+        """
+        group_a = self.group_at(region_a)
+        group_b = self.group_at(region_b)
+
+        if group_a and group_b:
+            if group_a != group_b:
+                group_a.update(group_b)
+                self.connected_regions.remove(group_b)
+        elif group_a:
+            group_a.add(region_b)
+        elif group_b:
+            group_b.add(region_a)
+        else:
+            self.connected_regions.append({region_a, region_b})
     
     def adjacent_positions(self, r: int, c: int, diag = False) -> list:
         """
@@ -173,9 +200,9 @@ class Board:
         if diag:
             directions = [(-1,0),(1,0),(0,-1),(0,1)]
         else:
-            directions = [  (-1, -1),   (-1, 0),    (-1, 1),
-                            (0, -1),                (0, 1),
-                            (1, -1),    (1, 0),     (1, 1)  ]
+            directions = [  (-1, -1), (-1, 0), (-1, 1),
+                            (0, -1),           (0, 1),
+                            (1, -1),  (1, 0),  (1, 1)   ]
 
         for dr, dc in directions:
             nr, nc = r + dr, c + dc
@@ -283,6 +310,9 @@ class Board:
         if self.makes_2x2(origin, shape):
             return False
         return True
+    
+    def all_regions_connected(self):
+        return any(len(group) == len(self.regions) for group in self.connected_regions)
 
     def place(self, shape: list[tuple[int, int]], origin: tuple[int, int], mark) -> 'Board':
         """Retorna uma nova instância de Board com a peça colocada, marcada com `mark`."""
@@ -292,15 +322,13 @@ class Board:
         for dr, dc in shape:
             r, c = origin[0] + dr, origin[1] + dc
             new_board[r, c] = mark
-        
+
         adjacent_positions = self.piece_adjacent_positions(origin, shape)
         for pos in adjacent_positions:
-            if pos not in self.connected_regions[region]:
-                if self.board[pos[0], pos[1]] in {'L', 'I', 'T', 'S'}:
-                    neighbor = self.region_at(pos[0], pos[1])
-                    if neighbor != region:
-                        self.connected_regions[region].add(neighbor)
-                        self.connected_regions[neighbor].add(region)
+            if self.board[pos[0], pos[1]] in {'L', 'I', 'T', 'S'}:
+                neighbor_region = self.region_at(pos[0], pos[1])
+                if neighbor_region != region:
+                    self.connect_groups(region, neighbor_region)
 
         return Board(new_board)
     
@@ -323,11 +351,10 @@ class CSP:
     def __init__(self, board: Board):
         self.board = board
         self.variables = list(board.regions.keys())
-        self.domains = self._compute_domains()
+        self.domains = self.compute_domains()
 
     def compute_domains(self):
-        domains = {region: self._generate_options(region, cells) for region, cells in self.board.regions.items()}
-        return domains
+        return {region: self._generate_options(region, cells) for region, cells in self.board.regions.items()}
 
     def _generate_options(self, region, cells):
         options = []
@@ -342,13 +369,73 @@ class CSP:
                 if self.board.is_valid(origin, shape, piece):
                     valid_options.append((piece, shape, origin))
         return valid_options
-    
-    def backtracking_search(self, assignment=None):
 
-        pass
+    def forward_checking(self, assignment):
+        for region in self.variables:
+            if region not in assignment and not self.board.is_region_filled(region):
+                self.domains[region] = [opt for opt in self.domains[region] if self.board.is_valid(*opt[2:], opt[0])]
 
-    def forward_checking(self):
-        pass
+    def backtracking_search(self, assignment={}):
+        if len(assignment) == len(self.variables):
+            return assignment
+
+        unassigned = [v for v in self.variables if v not in assignment and not self.board.is_region_filled(v)]
+        var = min(unassigned, key=lambda v: len(self.domains[v]))
+
+        for option in self.domains[var]:
+            piece, shape, origin = option
+            if self.board.is_valid(origin, shape, piece):
+                assignment[var] = option
+                self.board = self.board.place(shape, origin, piece)
+                self.forward_checking(assignment)
+
+                result = self.backtracking_search(assignment)
+                if result:
+                    return result
+
+                # Undo
+                self.board = self.board.remove(shape, origin)
+                del assignment[var]
+
+        return None
+
+class NuruominoState:
+    state_id = 0
+
+    def __init__(self, board: 'Board'):
+        self.board = board
+        self.id = NuruominoState.state_id
+        NuruominoState.state_id += 1
+
+    def __lt__(self, other: 'NuruominoState') -> bool:
+        return self.id < other.id
+
+class Nuruomino(Problem):
+    def __init__(self, board: Board, csp: CSP):
+        super().__init__(NuruominoState(board))
+        self.csp = csp
+
+    def actions(self, state: NuruominoState):
+        actions = []
+        board = state.board
+        for region, cells in board.regions.items():
+            if board.is_region_filled(region):
+                continue
+            for origin in cells:
+                for piece, shapes in PIECES.items():
+                    for shape in shapes:
+                        if board.is_valid(origin, shape, piece):
+                            actions.append((region, (piece, shape, origin)))
+        return actions
+
+    def result(self, state: NuruominoState, action) -> NuruominoState:
+        region_id, (mark, shape, origin) = action
+        new_board = state.board.place(shape, origin, mark)
+        return NuruominoState(new_board)
+
+    def goal_test(self, state: NuruominoState):
+        board = state.board
+        return board.all_regions_connected()
 
 class NuruominoState:
     state_id = 0
