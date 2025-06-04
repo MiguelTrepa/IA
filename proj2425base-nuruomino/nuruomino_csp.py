@@ -15,30 +15,32 @@ from search import Problem, Node, depth_first_graph_search
 # Tetromino definitions (with all rotations and reflections)
 PIECES = {
     'L': [
-        [(0,0), (1,0), (2,0), (2,1)], 
+        [(0,0), (1,0), (2,0), (2,1)],
+        [(0,0), (1,0), (2,0), (2,-1)],
         [(0,0), (0,1), (0,2), (1,0)],
-        [(0,0), (0,1), (1,1), (2,1)], 
-        [(0,2), (1,0), (1,1), (1,2)],
-        [(0,1), (1,1), (2,1), (2,0)], 
-        [(1,0), (1,1), (1,2), (0,2)],
-        [(0,0), (0,1), (1,0), (2,0)], 
-        [(0,0), (1,0), (1,1), (1,2)]
+        [(0,0), (0,1), (0,2), (-1,2)],
+        [(0,0), (0,1), (1,0), (2,0)],
+        [(0,0), (0,1), (1,1), (2,1)],
+        [(0,0), (1,0), (1,1), (1,2)],
+        [(0,0), (1,0), (1,-1), (1,-2)]
     ],
     'I': [
-        [(0,0), (1,0), (2,0), (3,0)], 
+        [(0,0), (1,0), (2,0), (3,0)],
         [(0,0), (0,1), (0,2), (0,3)]
     ],
     'T': [
-        [(-1, 0), (0, -1), (0, 0), (0, 1)],
-        [(0, -1), (0, 0), (1, 0), (-1, 0)],
-        [(1, 0), (0, -1), (0, 0), (0, 1)],
-        [(0, 1), (0, 0), (1, 0), (-1, 0)]
+        [(0,0), (0,-1), (0,1), (1,0)],
+        [(0,0), (-1,0), (1,0), (0,1)],
+        [(0,0), (0,-1), (0,1), (-1,0)],
+        [(0,0), (-1,0), (1,0), (0,-1)]
     ],
     'S': [
-        [(0,1), (0,2), (1,0), (1,1)],
+        [(0,0), (0,1), (1,-1), (1,0)],
         [(0,0), (1,0), (1,1), (2,1)],
         [(0,0), (0,1), (1,1), (1,2)],
-        [(0,1), (1,0), (1,1), (2,0)]   
+        [(0,0), (1,-1), (1,0), (2,-1)],
+        [(0,0), (1,0), (1,-1), (2,-1)],
+        [(0,0), (0,1), (-1,1), (-1,2)]
     ]
 }
 
@@ -239,14 +241,10 @@ class Board:
                 return True
         return False
 
-    def fits(self, origin:tuple[int, int], shape: list[tuple[int, int]]) -> bool:
-        """
-        Testa se a peça pode ser colocada no tabuleiro na região especificada por origin.
-        """
+    def fits(self, origin: tuple[int, int], shape: list[tuple[int, int]]) -> bool:
         placed = [(origin[0] + dx, origin[1] + dy) for dx, dy in shape]
-        if all(cell in board.regions[board.region_at(origin[0], origin[1])] for cell in placed):
-            return True
-        return False
+        region_cells = self.regions[self.region_at(origin[0], origin[1])]
+        return all(cell in region_cells for cell in placed)
     
     def has_border(self, origin: tuple[int, int], shape: list[tuple[int, int]]) -> bool:
         """
