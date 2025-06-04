@@ -12,41 +12,34 @@ import numpy as np
 from search import Problem, Node, depth_first_tree_search
 
 # Each shape is a list of (row, col) offsets from the origin (0, 0)
-L_SHAPE = [(0,0), (1,0), (2,0), (2,1)]
-
-I_SHAPE = [(0,0), (1,0), (2,0), (3,0)]
-
-T_SHAPE = [(0,0), (0,1), (0,2), (1,1)]
-
-S_SHAPE = [(0,1), (0,2), (1,0), (1,1)]
-
-# Rotates a piece by 90 degrees
-def rotate_coords(coords):
-    return [(y, -x) for x, y in coords]
-
-# Returns a canonical coordinates representation of a piece as a frozen set
-def canonical_coords(coords):
-    x_min = min(x for x, _ in coords)
-    y_min = min(y for _, y in coords)
-    return frozenset((y - y_min, x - x_min) for x, y in coords)
-
-# Makes all possible variations of a piece (optionally including reflections)
-# as a set of canonical representations
-def make_piece_variations(piece, reflections=True):
-    variations = {canonical_coords(piece)}
-    for i in range(3):
-        piece = rotate_coords(piece)
-        variations.add(canonical_coords(piece))
-    if reflections:
-        piece_reflected = [(y, x) for x, y in piece]
-        variations.update(make_piece_variations(piece_reflected, False))
-    return variations
-
-# Generate all possible shapes
-L_SHAPES = make_piece_variations(L_SHAPE)
-I_SHAPES = make_piece_variations(I_SHAPE)
-T_SHAPES = make_piece_variations(T_SHAPE)
-S_SHAPES = make_piece_variations(S_SHAPE)
+PIECES = {
+    'L': [
+        [(0,0), (0,1), (1,0), (2,0)],
+        [(0,0), (0,-1), (1,0), (2,0)],
+        [(0,0), (1,0), (0,1), (0,2)],
+        [(0,0), (1,0), (0,-1), (0,-2)],
+        [(0,0), (-1,0), (0,1), (0,2)],
+        [(0,0), (-1,0), (0,-1), (0,-2)],
+        [(0,0), (-1,0), (-2,0), (0,1)],
+        [(0,0), (-1,0), (-2,0), (0,-1)],
+    ],
+    'I': [
+        [(0,0), (1,0), (2,0), (3,0)],
+        [(0,0), (0,1), (0,2), (0,3)]
+    ],
+    'T': [
+        [(0,0), (0,-1), (0,1), (1,0)],
+        [(0,0), (-1,0), (1,0), (0,1)],
+        [(0,0), (0,-1), (0,1), (-1,0)],
+        [(0,0), (-1,0), (1,0), (0,-1)]
+    ],
+    'S': [
+        [(0,0), (0,1), (1,-1), (1,0)],
+        [(0,0), (0,-1), (1,0), (1,1)],
+        [(0,0), (1,0), (1,1), (2,1)], 
+        [(0,0), (1,0), (1,-1), (2,-1)]
+    ]
+}
 
 class NuruominoState:
     state_id = 0
