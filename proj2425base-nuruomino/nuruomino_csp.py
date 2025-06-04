@@ -10,7 +10,7 @@
 from collections import defaultdict
 from sys import stdin
 import numpy as np
-from search import Problem, Node, depth_first_tree_search
+from search import Problem, Node, depth_first_graph_search
 
 # Tetromino definitions (with all rotations and reflections)
 PIECES = {
@@ -46,13 +46,17 @@ class Board:
     """
     Representação interna de um tabuleiro do Puzzle Nuruomino.
     """
-    def __init__(self, board = None, connected_regions = None):
+    def __init__(self, board = None,  haspiece = None, connected_regions = None):
         if board is None:
             board = Board.parse_instance()
         self.board = board
         self.height, self.width = self.board.shape
         self.regions = self._extract_regions()
         self.neighbors = self._find_neighbors()
+        if haspiece is None:
+            self.haspiece = np.zeros(len(self.regions), dtype=bool)
+        else:
+            self.haspiece = haspiece
         self.connected_regions = connected_regions if connected_regions is not None else []
     
     def _extract_regions(self):
@@ -314,10 +318,12 @@ class Board:
     def all_regions_connected(self):
         return any(len(group) == len(self.regions) for group in self.connected_regions)
 
-    def place(self, shape: list[tuple[int, int]], origin: tuple[int, int], mark) -> 'Board':
+    def place(self, shape: list[tuple[int, int]], origin: tuple[int, int], mark, region) -> 'Board':
         """Retorna uma nova instância de Board com a peça colocada, marcada com `mark`."""
         new_board = np.copy(self.board)
+        new_haspiece = np.copy(self.haspiece)
         region = self.region_at(origin[0], origin[1])
+        new_haspiece[np.int_(region) - 1] = True
 
         for dr, dc in shape:
             r, c = origin[0] + dr, origin[1] + dc
@@ -330,7 +336,7 @@ class Board:
                 if neighbor_region != region:
                     self.connect_groups(region, neighbor_region)
 
-        return Board(new_board)
+        return Board(new_board, new_haspiece)
     
     def remove(self, shape: list[tuple[int, int]], origin: tuple[int, int]) -> 'Board':
         """Retorna uma nova instância de Board com a peça removida da posição origin."""
@@ -370,34 +376,6 @@ class CSP:
                     valid_options.append((piece, shape, origin))
         return valid_options
 
-    def forward_checking(self, assignment):
-        for region in self.variables:
-            if region not in assignment and not self.board.is_region_filled(region):
-                self.domains[region] = [opt for opt in self.domains[region] if self.board.is_valid(*opt[2:], opt[0])]
-
-    def backtracking_search(self, assignment={}):
-        if len(assignment) == len(self.variables):
-            return assignment
-
-        unassigned = [v for v in self.variables if v not in assignment and not self.board.is_region_filled(v)]
-        var = min(unassigned, key=lambda v: len(self.domains[v]))
-
-        for option in self.domains[var]:
-            piece, shape, origin = option
-            if self.board.is_valid(origin, shape, piece):
-                assignment[var] = option
-                self.board = self.board.place(shape, origin, piece)
-                self.forward_checking(assignment)
-
-                result = self.backtracking_search(assignment)
-                if result:
-                    return result
-
-                # Undo
-                self.board = self.board.remove(shape, origin)
-                del assignment[var]
-
-        return None
 
 class NuruominoState:
     state_id = 0
@@ -409,6 +387,14 @@ class NuruominoState:
 
     def __lt__(self, other: 'NuruominoState') -> bool:
         return self.id < other.id
+    
+    def __eq__(self, other):
+        if not isinstance(other, NuruominoState):
+            return False
+        return np.array_equal(self.board.board, other.board.board)
+    
+    def __hash__(self):
+        return hash(self.board.board.tobytes())
 
 class Nuruomino(Problem):
     def __init__(self, board: Board, csp: CSP):
@@ -430,57 +416,12 @@ class Nuruomino(Problem):
 
     def result(self, state: NuruominoState, action) -> NuruominoState:
         region_id, (mark, shape, origin) = action
-        new_board = state.board.place(shape, origin, mark)
+        new_board = state.board.place(shape, origin, mark, region_id)
         return NuruominoState(new_board)
 
     def goal_test(self, state: NuruominoState):
         board = state.board
         return board.all_regions_connected()
-
-class NuruominoState:
-    state_id = 0
-
-    def __init__(self, board: 'Board'):
-        self.board = board
-        self.id = NuruominoState.state_id
-        NuruominoState.state_id += 1
-
-    def __lt__(self, other: 'NuruominoState') -> bool:
-        """ Este método é utilizado em caso de empate na gestão da lista
-        de abertos nas procuras informadas. """
-        return self.id < other.id
-    
-class Nuruomino(Problem):
-    def __init__(self, board: Board, csp: CSP):
-        super().__init__(NuruominoState(board))
-        self.csp = csp
-
-    def actions(self, state: NuruominoState):
-        """Gera todas as formas válidas de colocar uma peça no estado atual."""
-        actions = []
-        board = state.board
-        for region, cells in board.regions.items():
-            if board.is_region_filled(region):
-                continue
-            for origin in cells:
-                for piece, shapes in PIECES.items():
-                    for shape in shapes:
-                        if board.is_valid(origin, shape, piece):
-                            actions.append((region, (piece, shape, origin)))
-        return actions
-
-    def result(self, state: NuruominoState, action) -> NuruominoState:
-        """Retorna o estado resultante de executar a 'action' sobre 'state'."""
-        region_id, (mark, shape, origin) = action
-        new_board = state.board.place(shape, origin, mark)
-        return NuruominoState(new_board)
-        
-
-    def goal_test(self, state: NuruominoState):
-        """Retorna True se e só se o estado passado como argumento é
-        um estado objetivo. Deve verificar se todas as posições do tabuleiro
-        estão preenchidas de acordo com as regras do problema."""
-        pass
 
 if __name__ == "__main__":
     # Exemplo de uso
@@ -509,5 +450,5 @@ if __name__ == "__main__":
     problem = Nuruomino(board, csp)
     
     # Exemplo de busca (ainda não implementada)
-    solution = depth_first_tree_search(problem)
+    solution = depth_first_graph_search(problem)
     print("Solução encontrada:", solution)
