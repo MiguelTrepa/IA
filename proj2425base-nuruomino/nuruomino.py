@@ -9,7 +9,7 @@
 
 from sys import stdin
 import numpy as np
-from search import Problem, Node, depth_first_tree_search
+from search import Problem, Node, depth_first_tree_search, greedy_search, astar_search
 
 # Each shape is a list of (row, col) offsets from the origin (0, 0)
 PIECES = {
@@ -225,7 +225,7 @@ class Board:
         for line in stdin.readlines():
             line_ar = [elem for elem in line.split()]
             board_list.append(line_ar)
-        board = np.array(board_list, dtype = 'U1')
+        board = np.array(board_list, dtype = '<U2')
 
         return Board(board, [], [])
 
@@ -241,10 +241,7 @@ class Nuruomino(Problem):
         for region_id in regions:
             region_cells = board.region_cells(region_id)
             for origin in region_cells:
-                for shape_group, mark in zip(
-                    [L_SHAPES, I_SHAPES, T_SHAPES, S_SHAPES],
-                    ['L', 'I', 'T', 'S']
-                ):
+                for mark, shape_group in PIECES.items():
                     for shape in shape_group:
                         if board.can_place(shape, origin, region_id, mark):
                             actions.append((region_id, shape, origin, mark))
@@ -268,9 +265,12 @@ class Nuruomino(Problem):
             return False
 
     def h(self, node: Node):
-        """Função heuristica utilizada para a procura A*."""
-        # TODO
-        pass
+        """Retorna o nº de regiões por preencher no board"""
+        regioes_a_preencher = sum(not haspiece for haspiece in node.state.board.haspiece)
+        return regioes_a_preencher
+
+
+
 
 if __name__ == "__main__":
     # Ler o tabuleiro do standard input e cria uma instância da classe Board
@@ -298,7 +298,7 @@ if __name__ == "__main__":
     #print(s5.board.adjacent_values(1, 0))
     #print(problem.actions(s4))
     #print(problem.goal_test(s5))
-    result = depth_first_tree_search(problem)
+    result = greedy_search(problem)
     if result is not None:
         result = result.state
         print(result.board)
