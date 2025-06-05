@@ -260,13 +260,17 @@ class Board:
 class Nuruomino(Problem):
     def __init__(self, board: Board):
         super().__init__(NuruominoState(board))
+        self.cnt = 0
 
     def actions(self, state: NuruominoState):
         """Gera todas as formas válidas de colocar uma peça no estado atual."""
         actions = []
-        action_priority = {'S': 0, 'T': 1, 'L': 2, 'I': 3}
+        actions_aux = []
+        action_priority = {'S': 0, 'T': 1, 'L': 2, 'I': 3} # prioridade das peças
         board = state.board
         for inference_region in board.regions:
+            if board.haspiece[int(inference_region) - 1]:
+                continue
             inference_region_cells = board.region_cells(inference_region)
             if len(inference_region_cells) == 4:
                 for origin in inference_region_cells:
@@ -275,19 +279,21 @@ class Nuruomino(Problem):
                             if board.can_place(shape, origin, inference_region, mark):
                                 action = (inference_region, shape, origin, mark)
                                 return [action]
-        regions = sorted([region for region in board.regions 
-                if not board.haspiece[int(region) - 1]],
-                key=lambda region: len(board.region_cells(region))
-        ) # ordena as regiões vazias pelo número de células vazias
-        #regions = board.regions
-        for region_id in regions:
+        for region_id in board.regions: # não fez inferências
+            if board.haspiece[int(region_id) - 1]:
+                continue
+            region_actions = []
             region_cells = board.region_cells(region_id)
             for origin in region_cells:
                 for mark, shape_group in PIECES.items():
                     for shape in shape_group:
                         if board.can_place(shape, origin, region_id, mark):
-                            actions.append((region_id, shape, origin, mark))
-        actions.sort(key = lambda ap: action_priority[ap[3]])
+                            region_actions.append((region_id, shape, origin, mark))
+            region_actions.sort(key = lambda ap: action_priority[ap[3]]) #ordena as ações pela prioridade das peças
+            actions_aux.append(region_actions)
+        actions_aux.sort(key=len)
+        for region_actions in actions_aux:
+            actions.extend(region_actions)
         return actions
 
     def result(self, state: NuruominoState, action) -> NuruominoState:
@@ -302,7 +308,9 @@ class Nuruomino(Problem):
         """Retorna True se e só se o estado passado como argumento é
         um estado objetivo. Deve verificar se todas as posições do tabuleiro
         estão preenchidas de acordo com as regras do problema."""
-        if len(self.actions(state)) == 0 and not(np.bool(False) in state.board.haspiece):
+        self.cnt += 1
+        #print(self.cnt)
+        if not(np.bool(False) in state.board.haspiece):
             return True
         else:
             return False
@@ -321,7 +329,7 @@ if __name__ == "__main__":
 
     #print(problem_board.haspiece)
     
-    print(problem_board)
+    #print(problem_board)
     # Criar uma instância do problema
     problem = Nuruomino(problem_board)
 
