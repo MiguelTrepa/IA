@@ -314,36 +314,33 @@ class Nuruomino(Problem):
             actions = self.computed_actions
             sorted_actions = sorted(actions.items(), key=lambda x: len(x[1]))
             return [action for _, group in sorted_actions for action in sorted(group, key=lambda piece: piece_priority[piece[3]])]
-        
+
         else:
-            filled = []
-            for region in state.board.regions:
-                if state.board.haspiece[int(region) - 1]:
-                    filled.append(region)
-            
+            filled = [region for region in state.board.regions if state.board.haspiece[int(region) - 1]]
+
             adjacent_regions = set()
-            for region in filled:
-                neighbors = state.board.adjacent_regions(region)
-                for neighbor in neighbors:
-                    if not state.board.haspiece[int(neighbor) - 1]:
-                        adjacent_regions.add(neighbor)
-            
             actions = []
+
+            for region in filled:
+                region_cells = state.board.cells[int(region) - 1]
+                for r, c in region_cells:
+                    for ar, ac in state.board.adjacent_positions(r, c, diag=False):
+                        neighbor_region = state.board.region_at(ar, ac)
+                        if neighbor_region and not state.board.haspiece[int(neighbor_region) - 1]:
+                            adjacent_regions.add(neighbor_region)
+
             for neighbor in adjacent_regions:
                 neighbor_actions = self.computed_actions[neighbor]
                 for action in neighbor_actions:
                     region_id, shape, origin, mark = action
                     if state.board.can_place(shape, origin, region_id, mark):
                         actions.append((region_id, shape, origin, mark))
-            
-    
-            # Obter ações agrupadas por região
+
             region_actions = defaultdict(list)
             for action in actions:
                 region_id = action[0]
                 region_actions[region_id].append(action)
 
-            # Ordenar regiões pelo número de ações disponíveis
             sorted_groups = sorted(region_actions.items(), key=lambda x: len(x[1]))
 
             sorted_actions = [action for _, group in sorted_groups for action in sorted(group, key=lambda piece: piece_priority[piece[3]])]
