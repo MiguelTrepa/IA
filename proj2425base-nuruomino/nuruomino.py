@@ -260,7 +260,7 @@ class Board:
     
     def compute_actions(self) -> dict:
         """
-        Gera todas as ações possíveis para o tabuleiro atual.
+        Gera todas as ações possíveis para o tabuleiro atual e coloca as peças que podem ser colcoadas.
         """
         actions = defaultdict(list)
         for region in self.regions:
@@ -272,7 +272,17 @@ class Board:
                     for shape in shape_group:
                         if self.can_place(shape, origin, region, mark):
                             actions[region].append((region, shape, origin, mark))
+        
+        self.infer(actions)
+
         return dict(actions)
+    
+    def infer(self, actions) -> 'Board':
+        for region, actions in actions.items():
+            if len(actions) == 1:
+                region_id, shape, origin, mark = actions[0]
+                self = self.place(shape, origin, mark)
+                self.haspiece[int(region_id) - 1] = np.bool(True)
 
     @staticmethod
     def parse_instance() -> 'Board':
@@ -298,10 +308,13 @@ class Nuruomino(Problem):
         """
         Gera todas as formas válidas de colocar uma peça no estado atual.
         """
+        piece_priority = {'S': 0, 'T': 1, 'L': 2, 'I': 3}
+
         if not True in state.board.haspiece:
             actions = self.computed_actions
             sorted_actions = sorted(actions.items(), key=lambda x: len(x[1]))
-            return [action for _, group in sorted_actions for action in group]
+            return [action for _, group in sorted_actions for action in sorted(group, key=lambda piece: piece_priority[piece[3]])]
+        
         else:
             filled = []
             for region in state.board.regions:
@@ -310,8 +323,11 @@ class Nuruomino(Problem):
             
             adjacent_regions = set()
             for region in filled:
-                adjacent_regions.update(state.board.adjacent_regions(region))
-
+                neighbors = state.board.adjacent_regions(region)
+                for neighbor in neighbors:
+                    if not state.board.haspiece[int(neighbor) - 1]:
+                        adjacent_regions.add(neighbor)
+            
             actions = []
             for neighbor in adjacent_regions:
                 neighbor_actions = self.computed_actions[neighbor]
@@ -330,7 +346,7 @@ class Nuruomino(Problem):
             # Ordenar regiões pelo número de ações disponíveis
             sorted_groups = sorted(region_actions.items(), key=lambda x: len(x[1]))
 
-            sorted_actions = [action for _, group in sorted_groups for action in group]
+            sorted_actions = [action for _, group in sorted_groups for action in sorted(group, key=lambda piece: piece_priority[piece[3]])]
             return sorted_actions
 
     def result(self, state: NuruominoState, action) -> NuruominoState:
