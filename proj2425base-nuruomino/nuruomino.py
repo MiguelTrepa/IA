@@ -9,7 +9,8 @@
 
 from sys import stdin
 import numpy as np
-from search import Problem, Node, depth_first_tree_search, greedy_search, astar_search
+from search import Problem, Node, depth_first_tree_search, greedy_search, astar_search, breadth_first_tree_search, \
+    depth_first_graph_search, iterative_deepening_search
 
 # Each shape is a list of (row, col) offsets from the origin (0, 0)
 PIECES = {
@@ -138,6 +139,7 @@ class Board:
     
     def can_place(self, shape: list[tuple[int, int]], origin: tuple[int, int], region_id: int, mark: str) -> bool:
         """Verifica se é possível colocar a forma no tabuleiro a partir de `origin`, respeitando os limites da região."""
+        frontier = False
         marks = np.array(['L', 'I', 'T', 'S'])
         if (self.haspiece[int(region_id) - 1]):
             return False
@@ -155,9 +157,16 @@ class Board:
                 return False # peça à direita igual
             if (c + 1 < self.board.shape[1] and self.board[r, c + 1] == mark):
                 return False # peça em baixo igual
+            adj_values = self.adjacent_values(r, c, False)
+            if any(val in marks for val in adj_values):
+                frontier = True
         if self.makes_2x2(origin, shape):
                 return False # forma um quadrado
-        return True
+        if frontier:
+            return True # faz parte da fronteira
+        if not any(self.haspiece):
+            return True # tabuleiro vazio, logo faz sempre parte da fronteira
+        return False # não faz parte da fronteira
 
     def region_cells(self, region_id: int) -> list[tuple[int, int]]:
         """Devolve a lista de posições (row, col) pertencentes a uma região."""
@@ -206,13 +215,32 @@ class Board:
 
         return list(adjacent)
     
-    def adjacent_positions_shape(shape: list[tuple[int, int]], origin: tuple[int, int]) -> list:
+    def adjacent_positions_shape(self, shape: list[tuple[int, int]], origin: tuple[int, int]) -> list:
         """Devolve as posições adjacentes à forma colocada no tabuleiro a partir de `origin`."""
         adjacent = set()
         for dr, dc in shape:
             r, c = origin[0] + dr, origin[1] + dc
             adjacent.update(self.adjacent_positions(r, c, diag=True))
         return sorted(adjacent)
+    
+    def adjacent_values(self, row:int, col:int, diag: bool) -> list:
+        """Devolve os valores das celulas adjacentes à posição, em todas as direções, incluindo diagonais.
+        Formato: [LeftTopDiag, , Top, RightTopDiag, Left, Right, , BottomLeftDiag, Bottom, BottomRightDiag]"""
+        values = np.array([])
+
+        if diag:
+            directions = [  (-1, -1),   (-1, 0),    (-1, 1),
+                            (0, -1),                (0, 1),
+                            (1, -1),    (1, 0),     (1, 1)  ]
+        else:
+            directions = [(-1, 0), (0, -1), (0, 1), (1, 0)]
+
+        for dr, dc in directions:
+            r, c = row + dr, col + dc
+            if 0 <= r < self.board.shape[0] and 0 <= c < self.board.shape[1]:
+                values = np.append(values, self.board[r][c])
+
+        return values
 
     @staticmethod
     def parse_instance() -> 'Board':
@@ -236,8 +264,22 @@ class Nuruomino(Problem):
     def actions(self, state: NuruominoState):
         """Gera todas as formas válidas de colocar uma peça no estado atual."""
         actions = []
+        action_priority = {'S': 0, 'T': 1, 'L': 2, 'I': 3}
         board = state.board
-        regions = board.regions
+        for inference_region in board.regions:
+            inference_region_cells = board.region_cells(inference_region)
+            if len(inference_region_cells) == 4:
+                for origin in inference_region_cells:
+                    for mark, shape_group in PIECES.items():
+                        for shape in shape_group:
+                            if board.can_place(shape, origin, inference_region, mark):
+                                action = (inference_region, shape, origin, mark)
+                                return [action]
+        regions = sorted([region for region in board.regions 
+                if not board.haspiece[int(region) - 1]],
+                key=lambda region: len(board.region_cells(region))
+        ) # ordena as regiões vazias pelo número de células vazias
+        #regions = board.regions
         for region_id in regions:
             region_cells = board.region_cells(region_id)
             for origin in region_cells:
@@ -245,6 +287,7 @@ class Nuruomino(Problem):
                     for shape in shape_group:
                         if board.can_place(shape, origin, region_id, mark):
                             actions.append((region_id, shape, origin, mark))
+        actions.sort(key = lambda ap: action_priority[ap[3]])
         return actions
 
     def result(self, state: NuruominoState, action) -> NuruominoState:
@@ -286,7 +329,7 @@ if __name__ == "__main__":
     initial_state = NuruominoState(problem_board)
     #s1 = problem.result(initial_state, (np.str_('1'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(0)), 'L'))
     #print(s1.board)
-    print(problem.actions(initial_state))
+    #print(problem.actions(initial_state))
     #s2 = problem.result(s1,(np.str_('5'), frozenset({(1, 0), (2, 0), (0, 0), (3, 0)}), (np.int64(2), np.int64(5)), 'I'))
     #print(s2.board.haspiece)
     #s3 = problem.result(s2,(np.str_('4'), frozenset({(0, 1), (1, 0), (0, 2), (0, 0)}), (np.int64(4), np.int64(0)), 'L'))
@@ -298,7 +341,7 @@ if __name__ == "__main__":
     #print(s5.board.adjacent_values(1, 0))
     #print(problem.actions(s4))
     #print(problem.goal_test(s5))
-    result = greedy_search(problem)
+    result = depth_first_graph_search(problem)
     if result is not None:
         result = result.state
         print(result.board)
