@@ -7,6 +7,7 @@
 #  90173 Rafael Ferreira
 
 
+from collections import defaultdict
 from sys import stdin
 import numpy as np
 from search import Problem, Node, depth_first_tree_search, greedy_search, astar_search, breadth_first_tree_search, \
@@ -179,6 +180,13 @@ class Board:
         positions = list(zip(*np.where(self.board == region_id)))
         return positions
     
+    def region_at(self, row: int, col: int) -> str:
+        """Retorna a região original (número) da célula, mesmo que já esteja preenchida com uma peça."""
+        for i, cells in enumerate(self.cells):
+            if (row, col) in cells:
+                return self.regions[i]
+        return None
+        
     def place(self, shape: list[tuple[int, int]], origin: tuple[int, int], mark) -> 'Board':
         """Retorna uma nova instância de Board com a peça colocada, marcada com `mark`."""
         new_board = np.copy(self.board)
@@ -187,20 +195,21 @@ class Board:
             new_board[r, c] = mark
         return Board(new_board, np.copy(self.haspiece), np.copy(self.regions), np.copy(self.cells))
 
-    def adjacent_regions(self, region:int, diag: bool) -> list:
+    def adjacent_regions(self, region: int, diag: bool = False) -> list:
         """Devolve uma lista das regiões que fazem fronteira com a região enviada no argumento."""
         regions = set()
         region_cells = self.cells[int(region) - 1]
 
-        adjacent_cells = self.adjacent_positions(*region_cells[0], diag)
+        for r, c in region_cells:
+            adjacents = self.adjacent_positions(r, c, diag)
+            for ar, ac in adjacents:
+                adj_region = self.region_at(ar, ac)
+                if adj_region and adj_region != region:
+                    regions.add(adj_region)
 
-        for r, c in adjacent_cells:
-            if self.board[r, c] != region:
-                regions.add(self.board[r, c])
-        
         return list(regions)
     
-    def adjacent_positions(self, r: int, c: int, diag = False) -> list:
+    def adjacent_positions(self, r: int, c: int, diag: bool = False) -> list:
         """
         Retorna uma lista de posições adjacentes da posição (r, c) do tabuleiro.
         Se diag = True, consideramos as diagonais
@@ -248,6 +257,22 @@ class Board:
                 values = np.append(values, self.board[r][c])
 
         return values
+    
+    def compute_actions(self) -> dict:
+        """
+        Gera todas as ações possíveis para o tabuleiro atual.
+        """
+        actions = defaultdict(list)
+        for region in self.regions:
+            if self.haspiece[int(region) - 1]:
+                continue
+            region_cells = self.cells[int(region) - 1]
+            for origin in region_cells:
+                for mark, shape_group in PIECES.items():
+                    for shape in shape_group:
+                        if self.can_place(shape, origin, region, mark):
+                            actions[region].append((region, shape, origin, mark))
+        return dict(actions)
 
     @staticmethod
     def parse_instance() -> 'Board':
@@ -267,41 +292,44 @@ class Board:
 class Nuruomino(Problem):
     def __init__(self, board: Board):
         super().__init__(NuruominoState(board))
-        self.cnt = 0
+        self.computed_actions = board.compute_actions()
 
-    def actions(self, state: NuruominoState):
+    def actions(self, state: NuruominoState) -> list:
         """Gera todas as formas válidas de colocar uma peça no estado atual."""
-        actions = []
-        actions_aux = []
-        action_priority = {'S': 0, 'T': 1, 'L': 2, 'I': 3} # prioridade das peças
-        board = state.board
-        for inference_region in board.regions:
-            if board.haspiece[int(inference_region) - 1]:
-                continue
-            inference_region_cells = board.cells[int(inference_region) - 1]
-            if len(inference_region_cells) == 4:
-                for origin in inference_region_cells:
-                    for mark, shape_group in PIECES.items():
-                        for shape in shape_group:
-                            if board.can_place(shape, origin, inference_region, mark):
-                                action = (inference_region, shape, origin, mark)
-                                return [action]
-        for region_id in board.regions: # não fez inferências
-            if board.haspiece[int(region_id) - 1]:
-                continue
-            region_actions = []
-            region_cells = board.cells[int(region_id) - 1]
-            for origin in region_cells:
-                for mark, shape_group in PIECES.items():
-                    for shape in shape_group:
-                        if board.can_place(shape, origin, region_id, mark):
-                            region_actions.append((region_id, shape, origin, mark))
-            region_actions.sort(key = lambda ap: action_priority[ap[3]]) #ordena as ações pela prioridade das peças
-            actions_aux.append(region_actions)
-        actions_aux.sort(key=len)
-        for region_actions in actions_aux:
-            actions.extend(region_actions)
-        return actions
+        if not True in state.board.haspiece:
+            actions = self.computed_actions
+            sorted_actions = sorted(actions.items(), key=lambda x: len(x[1]))
+            return [action for _, group in sorted_actions for action in group]
+        else:
+            filled = []
+            for region in state.board.regions:
+                if state.board.haspiece[int(region) - 1]:
+                    filled.append(region)
+            
+            adjacent_regions = set()
+            for region in filled:
+                adjacent_regions.update(state.board.adjacent_regions(region))
+
+            actions = []
+            for neighbor in adjacent_regions:
+                neighbor_actions = self.computed_actions[neighbor]
+                for action in neighbor_actions:
+                    region_id, shape, origin, mark = action
+                    if state.board.can_place(shape, origin, region_id, mark):
+                        actions.append((region_id, shape, origin, mark))
+            grouped = defaultdict(list)
+    
+            # Agrupar ações por região
+            for action in actions:
+                region_id = action[0]
+                grouped[region_id].append(action)
+
+            # Ordenar regiões pelo número de ações disponíveis
+            sorted_groups = sorted(grouped.items(), key=lambda x: len(x[1]))
+
+            # Achatar a lista de volta
+            sorted_actions = [action for _, group in sorted_groups for action in group]
+            return sorted_actions
 
     def result(self, state: NuruominoState, action) -> NuruominoState:
         """Retorna o estado resultante de executar a 'action' sobre 'state'."""
@@ -315,8 +343,6 @@ class Nuruomino(Problem):
         """Retorna True se e só se o estado passado como argumento é
         um estado objetivo. Deve verificar se todas as posições do tabuleiro
         estão preenchidas de acordo com as regras do problema."""
-        self.cnt += 1
-        #print(self.cnt)
         if not(np.bool(False) in state.board.haspiece):
             return True
         else:
