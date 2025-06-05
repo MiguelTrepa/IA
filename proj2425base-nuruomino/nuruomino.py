@@ -7,7 +7,6 @@
 #  90173 Rafael Ferreira
 
 
-from collections import defaultdict
 from sys import stdin
 import numpy as np
 from search import Problem, Node, depth_first_tree_search, greedy_search, astar_search, breadth_first_tree_search, \
@@ -117,31 +116,32 @@ class Board:
     
     def makes_2x2(self, origin: tuple[int, int], shape: list[tuple[int, int]]) -> bool:
         """
-        Verifica se a colocação da peça na posição origin forma um quadrado 2x2,
-        considerando tanto a peça quanto as células adjacentes a ela.
-        Retorna True se formar um quadrado 2x2, False caso contrário.
+        Verifica se a colocação da peça na posição origin formaria um quadrado 2x2,
+        sem modificar o tabuleiro nem fazer cópias.
         """
-        temp_board = self.board.copy()
-        # Marca as posições da peça com piece_label
-        for dr, dc in shape:
-            r, c = origin[0] + dr, origin[1] + dc
-            if 0 <= r < self.height and 0 <= c < self.width:
-                temp_board[r, c] = 'L'
-            else:
-                return False
-
-        # Define área relevante para verificar 2x2
         piece = set([(origin[0] + dr, origin[1] + dc) for dr, dc in shape])
         surrounds = set(self.piece_adjacent_positions(origin, shape, diag=True))
         greater_area = piece | surrounds
-
         marks = {'L', 'I', 'T', 'S'}
+
         for r, c in greater_area:
-            # Verifica se é possível formar um quadrado 2x2 a partir de (r, c)
-            if r + 1 < self.height and c + 1 < self.width:
-                O_SHAPE = {temp_board[r + dr, c + dc] for dr, dc in [(0, 0), (0, 1), (1, 0), (1, 1)]}
-                if all(mark in marks for mark in O_SHAPE):
-                    return True
+            if r + 1 >= self.height or c + 1 >= self.width:
+                continue
+
+            block = [(r, c), (r+1, c), (r, c+1), (r+1, c+1)]
+
+            count = 0
+            for cell in block:
+                if cell in piece:
+                    count += 1
+                else:
+                    val = self.board[cell]
+                    if val in marks:
+                        count += 1
+
+            if count == 4:
+                return True
+
         return False
     
     def can_place(self, shape: list[tuple[int, int]], origin: tuple[int, int], region_id: int, mark: str) -> bool:
@@ -180,13 +180,6 @@ class Board:
         positions = list(zip(*np.where(self.board == region_id)))
         return positions
     
-    def region_at(self, row: int, col: int) -> str:
-        """Retorna a região original (número) da célula, mesmo que já esteja preenchida com uma peça."""
-        for i, cells in enumerate(self.cells):
-            if (row, col) in cells:
-                return self.regions[i]
-        return None
-        
     def place(self, shape: list[tuple[int, int]], origin: tuple[int, int], mark) -> 'Board':
         """Retorna uma nova instância de Board com a peça colocada, marcada com `mark`."""
         new_board = np.copy(self.board)
@@ -195,21 +188,20 @@ class Board:
             new_board[r, c] = mark
         return Board(new_board, np.copy(self.haspiece), np.copy(self.regions), np.copy(self.cells))
 
-    def adjacent_regions(self, region: int, diag: bool = False) -> list:
+    def adjacent_regions(self, region:int, diag: bool) -> list:
         """Devolve uma lista das regiões que fazem fronteira com a região enviada no argumento."""
         regions = set()
         region_cells = self.cells[int(region) - 1]
 
-        for r, c in region_cells:
-            adjacents = self.adjacent_positions(r, c, diag)
-            for ar, ac in adjacents:
-                adj_region = self.region_at(ar, ac)
-                if adj_region and adj_region != region:
-                    regions.add(adj_region)
+        adjacent_cells = self.adjacent_positions(*region_cells[0], diag)
 
+        for r, c in adjacent_cells:
+            if self.board[r, c] != region:
+                regions.add(self.board[r, c])
+        
         return list(regions)
     
-    def adjacent_positions(self, r: int, c: int, diag: bool = False) -> list:
+    def adjacent_positions(self, r: int, c: int, diag = False) -> list:
         """
         Retorna uma lista de posições adjacentes da posição (r, c) do tabuleiro.
         Se diag = True, consideramos as diagonais
@@ -257,32 +249,6 @@ class Board:
                 values = np.append(values, self.board[r][c])
 
         return values
-    
-    def compute_actions(self) -> dict:
-        """
-        Gera todas as ações possíveis para o tabuleiro atual e coloca as peças que podem ser colcoadas.
-        """
-        actions = defaultdict(list)
-        for region in self.regions:
-            if self.haspiece[int(region) - 1]:
-                continue
-            region_cells = self.cells[int(region) - 1]
-            for origin in region_cells:
-                for mark, shape_group in PIECES.items():
-                    for shape in shape_group:
-                        if self.can_place(shape, origin, region, mark):
-                            actions[region].append((region, shape, origin, mark))
-        
-        self.infer(actions)
-
-        return dict(actions)
-    
-    def infer(self, actions) -> 'Board':
-        for region, actions in actions.items():
-            if len(actions) == 1:
-                region_id, shape, origin, mark = actions[0]
-                self = self.place(shape, origin, mark)
-                self.haspiece[int(region_id) - 1] = np.bool(True)
 
     @staticmethod
     def parse_instance() -> 'Board':
@@ -302,49 +268,41 @@ class Board:
 class Nuruomino(Problem):
     def __init__(self, board: Board):
         super().__init__(NuruominoState(board))
-        self.computed_actions = board.compute_actions()
+        self.cnt = 0
 
-    def actions(self, state: NuruominoState) -> list:
-        """
-        Gera todas as formas válidas de colocar uma peça no estado atual.
-        """
-        piece_priority = {'S': 0, 'T': 1, 'L': 2, 'I': 3}
-
-        if not True in state.board.haspiece:
-            actions = self.computed_actions
-            sorted_actions = sorted(actions.items(), key=lambda x: len(x[1]))
-            return [action for _, group in sorted_actions for action in sorted(group, key=lambda piece: piece_priority[piece[3]])]
-
-        else:
-            filled = [region for region in state.board.regions if state.board.haspiece[int(region) - 1]]
-
-            adjacent_regions = set()
-            actions = []
-
-            for region in filled:
-                region_cells = state.board.cells[int(region) - 1]
-                for r, c in region_cells:
-                    for ar, ac in state.board.adjacent_positions(r, c, diag=False):
-                        neighbor_region = state.board.region_at(ar, ac)
-                        if neighbor_region and not state.board.haspiece[int(neighbor_region) - 1]:
-                            adjacent_regions.add(neighbor_region)
-
-            for neighbor in adjacent_regions:
-                neighbor_actions = self.computed_actions[neighbor]
-                for action in neighbor_actions:
-                    region_id, shape, origin, mark = action
-                    if state.board.can_place(shape, origin, region_id, mark):
-                        actions.append((region_id, shape, origin, mark))
-
-            region_actions = defaultdict(list)
-            for action in actions:
-                region_id = action[0]
-                region_actions[region_id].append(action)
-
-            sorted_groups = sorted(region_actions.items(), key=lambda x: len(x[1]))
-
-            sorted_actions = [action for _, group in sorted_groups for action in sorted(group, key=lambda piece: piece_priority[piece[3]])]
-            return sorted_actions
+    def actions(self, state: NuruominoState):
+        """Gera todas as formas válidas de colocar uma peça no estado atual."""
+        actions = []
+        actions_aux = []
+        action_priority = {'S': 0, 'T': 1, 'L': 2, 'I': 3} # prioridade das peças
+        board = state.board
+        for inference_region in board.regions:
+            if board.haspiece[int(inference_region) - 1]:
+                continue
+            inference_region_cells = board.cells[int(inference_region) - 1]
+            if len(inference_region_cells) == 4:
+                for origin in inference_region_cells:
+                    for mark, shape_group in PIECES.items():
+                        for shape in shape_group:
+                            if board.can_place(shape, origin, inference_region, mark):
+                                action = (inference_region, shape, origin, mark)
+                                return [action]
+        for region_id in board.regions: # não fez inferências
+            if board.haspiece[int(region_id) - 1]:
+                continue
+            region_actions = []
+            region_cells = board.cells[int(region_id) - 1]
+            for origin in region_cells:
+                for mark, shape_group in PIECES.items():
+                    for shape in shape_group:
+                        if board.can_place(shape, origin, region_id, mark):
+                            region_actions.append((region_id, shape, origin, mark))
+            region_actions.sort(key = lambda ap: action_priority[ap[3]]) #ordena as ações pela prioridade das peças
+            actions_aux.append(region_actions)
+        actions_aux.sort(key=len)
+        for region_actions in actions_aux:
+            actions.extend(region_actions)
+        return actions
 
     def result(self, state: NuruominoState, action) -> NuruominoState:
         """Retorna o estado resultante de executar a 'action' sobre 'state'."""
@@ -358,6 +316,8 @@ class Nuruomino(Problem):
         """Retorna True se e só se o estado passado como argumento é
         um estado objetivo. Deve verificar se todas as posições do tabuleiro
         estão preenchidas de acordo com as regras do problema."""
+        self.cnt += 1
+        #print(self.cnt)
         if not(np.bool(False) in state.board.haspiece):
             return True
         else:
