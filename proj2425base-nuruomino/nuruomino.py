@@ -295,7 +295,9 @@ class Nuruomino(Problem):
         self.computed_actions = board.compute_actions()
 
     def actions(self, state: NuruominoState) -> list:
-        """Gera todas as formas válidas de colocar uma peça no estado atual."""
+        """
+        Gera todas as formas válidas de colocar uma peça no estado atual.
+        """
         if not True in state.board.haspiece:
             actions = self.computed_actions
             sorted_actions = sorted(actions.items(), key=lambda x: len(x[1]))
@@ -317,17 +319,17 @@ class Nuruomino(Problem):
                     region_id, shape, origin, mark = action
                     if state.board.can_place(shape, origin, region_id, mark):
                         actions.append((region_id, shape, origin, mark))
-            grouped = defaultdict(list)
+            
     
-            # Agrupar ações por região
+            # Obter ações agrupadas por região
+            region_actions = defaultdict(list)
             for action in actions:
                 region_id = action[0]
-                grouped[region_id].append(action)
+                region_actions[region_id].append(action)
 
             # Ordenar regiões pelo número de ações disponíveis
-            sorted_groups = sorted(grouped.items(), key=lambda x: len(x[1]))
+            sorted_groups = sorted(region_actions.items(), key=lambda x: len(x[1]))
 
-            # Achatar a lista de volta
             sorted_actions = [action for _, group in sorted_groups for action in group]
             return sorted_actions
 
