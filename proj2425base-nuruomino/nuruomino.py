@@ -64,7 +64,8 @@ class Board:
         haspiece (list[bool]): Flags indicando se cada região já tem uma peça.
         regions (list[str]): Lista das regiões presentes.
     """
-    def __init__(self, board=np.array([[1]], dtype=np.int8), haspiece=np.array([1], dtype=np.bool), regions=np.array([1], dtype=np.int8)):
+    def __init__(self, board=np.array([[1]], dtype=np.int8), haspiece=np.array([1], dtype=np.bool), 
+            regions=np.array([1], dtype=np.int8), cells=np.array([[1]])):
         self.board = board
         self.height, self.width = self.board.shape
 
@@ -74,9 +75,14 @@ class Board:
                 region_count = max(int(x) for x in unique_regions)
             except:
                 region_count = len(unique_regions)
+            cellsaux = []
             self.haspiece = [np.bool(False)] * region_count
+            for i in range(region_count):
+                cellsaux.append(self.region_cells(np.str_(i + 1)))
+            self.cells = np.array(cellsaux, dtype=object)
         else:
             self.haspiece = list(haspiece)
+            self.cells = cells
 
         if regions is None or len(regions) == 0:
             self.regions = np.unique(board)
@@ -179,13 +185,14 @@ class Board:
         for dr, dc in shape:
             r, c = origin[0] + dr, origin[1] + dc
             new_board[r, c] = mark
-        return Board(new_board, np.copy(self.haspiece), np.copy(self.regions))
+        return Board(new_board, np.copy(self.haspiece), np.copy(self.regions), np.copy(self.cells))
 
     def adjacent_regions(self, region:int, diag: bool) -> list:
         """Devolve uma lista das regiões que fazem fronteira com a região enviada no argumento."""
         regions = set()
-        
-        adjacent_cells = self.adjacent_positions(*self.region_cells(region)[0], diag)
+        region_cells = self.cells[int(region) - 1]
+
+        adjacent_cells = self.adjacent_positions(*region_cells[0], diag)
 
         for r, c in adjacent_cells:
             if self.board[r, c] != region:
@@ -255,7 +262,7 @@ class Board:
             board_list.append(line_ar)
         board = np.array(board_list, dtype = '<U2')
 
-        return Board(board, [], [])
+        return Board(board, [], [], [])
 
 class Nuruomino(Problem):
     def __init__(self, board: Board):
@@ -271,7 +278,7 @@ class Nuruomino(Problem):
         for inference_region in board.regions:
             if board.haspiece[int(inference_region) - 1]:
                 continue
-            inference_region_cells = board.region_cells(inference_region)
+            inference_region_cells = board.cells[int(inference_region) - 1]
             if len(inference_region_cells) == 4:
                 for origin in inference_region_cells:
                     for mark, shape_group in PIECES.items():
@@ -283,7 +290,7 @@ class Nuruomino(Problem):
             if board.haspiece[int(region_id) - 1]:
                 continue
             region_actions = []
-            region_cells = board.region_cells(region_id)
+            region_cells = board.cells[int(region_id) - 1]
             for origin in region_cells:
                 for mark, shape_group in PIECES.items():
                     for shape in shape_group:
@@ -335,6 +342,7 @@ if __name__ == "__main__":
 
     # Criar o estado inicial do problema
     initial_state = NuruominoState(problem_board)
+    #print(initial_state.board.cells)
     #s1 = problem.result(initial_state, (np.str_('1'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(0)), 'L'))
     #print(s1.board)
     #print(problem.actions(initial_state))
