@@ -9,46 +9,46 @@
 
 from sys import stdin
 import numpy as np
-from search import Problem, Node, depth_first_tree_search
+from search import Problem, Node, depth_first_tree_search, greedy_search, astar_search, breadth_first_tree_search, \
+    depth_first_graph_search, iterative_deepening_search
 
-# Each shape is a list of (row, col) offsets from the origin (0, 0)
-L_SHAPE = [(0,0), (1,0), (2,0), (2,1)]
+# Conjunto de peças do jogo Nuruomino
+MARKS = {'L', 'I', 'T', 'S'}
 
-I_SHAPE = [(0,0), (1,0), (2,0), (3,0)]
+# Cada shape é uma lista de offsets (row, col) a partir de uma origem (0, 0)
+PIECES = {
+    'L': [
+        [(0,0), (0,1), (1,0), (2,0)],
+        [(0,0), (0,-1), (1,0), (2,0)],
+        [(0,0), (1,0), (0,1), (0,2)],
+        [(0,0), (1,0), (0,-1), (0,-2)],
+        [(0,0), (-1,0), (0,1), (0,2)],
+        [(0,0), (-1,0), (0,-1), (0,-2)],
+        [(0,0), (-1,0), (-2,0), (0,1)],
+        [(0,0), (-1,0), (-2,0), (0,-1)],
+    ],
+    'I': [
+        [(0,0), (1,0), (2,0), (3,0)],
+        [(0,0), (0,1), (0,2), (0,3)]
+    ],
+    'T': [
+        [(0,0), (0,-1), (0,1), (1,0)],
+        [(0,0), (-1,0), (1,0), (0,1)],
+        [(0,0), (0,-1), (0,1), (-1,0)],
+        [(0,0), (-1,0), (1,0), (0,-1)]
+    ],
+    'S': [
+        [(0,0), (0,1), (1,-1), (1,0)],
+        [(0,0), (0,-1), (1,0), (1,1)],
+        [(0,0), (1,0), (1,1), (2,1)], 
+        [(0,0), (1,0), (1,-1), (2,-1)]
+    ]
+}
 
-T_SHAPE = [(0,0), (0,1), (0,2), (1,1)]
-
-S_SHAPE = [(0,1), (0,2), (1,0), (1,1)]
-
-O_SHAPE = [(0,0), (0,1), (1,0), (1,1)] # never placed, used for testing a wrong placement
-
-# Rotates a piece by 90 degrees
-def rotate_coords(coords):
-    return [(y, -x) for x, y in coords]
-
-# Returns a canonical coordinates representation of a piece as a frozen set
-def canonical_coords(coords):
-    x_min = min(x for x, _ in coords)
-    y_min = min(y for _, y in coords)
-    return frozenset((y - y_min, x - x_min) for x, y in coords)
-
-# Makes all possible variations of a piece (optionally including reflections)
-# as a set of canonical representations
-def make_piece_variations(piece, reflections=True):
-    variations = {canonical_coords(piece)}
-    for i in range(3):
-        piece = rotate_coords(piece)
-        variations.add(canonical_coords(piece))
-    if reflections:
-        piece_reflected = [(y, x) for x, y in piece]
-        variations.update(make_piece_variations(piece_reflected, False))
-    return variations
-
-# Generate all possible shapes
-L_SHAPES = make_piece_variations(L_SHAPE)
-I_SHAPES = make_piece_variations(I_SHAPE)
-T_SHAPES = make_piece_variations(T_SHAPE)
-S_SHAPES = make_piece_variations(S_SHAPE)
+# Direções adjacentes sem diagonal
+DIRECTIONS = ((-1,0), (1,0), (0,-1), (0,1))
+# Direções adjacentes com diagonal
+DIAGONAL_DIRECTIONS = ((-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1))
 
 class NuruominoState:
     state_id = 0
@@ -57,161 +57,188 @@ class NuruominoState:
         self.board = board
         self.id = NuruominoState.state_id
         NuruominoState.state_id += 1
+        self._hash = None # Guardamos a hash para maior eficiência na procura (evitar estados repetidos)
 
-    def __lt__(self, other):
+    def __lt__(self, other: 'NuruominoState') -> bool:
         """ Este método é utilizado em caso de empate na gestão da lista
         de abertos nas procuras informadas. """
         return self.id < other.id
+    
+    def __hash__(self):
+        """ Retorna um hash único para o estado, baseado no conteúdo do tabuleiro. """
+        if self._hash is None:
+            # Combina o tabuleiro e as regiões preenchidas num único hash
+            self._hash = hash((self.board.board.tobytes(), tuple(self.board.haspiece)))
+        return self._hash
+    
+    def __eq__(self, other: 'NuruominoState') -> bool:
+        """ 
+        Verifica se dois estados são iguais, comparando o conteúdo do tabuleiro e as regiões preenchidas. 
+        """
+        if not isinstance(other, NuruominoState):
+            return False
+        # Compara o tabuleiro e as regiões preenchidas
+        return (np.array_equal(self.board.board, other.board.board) and 
+                self.board.haspiece == other.board.haspiece)
 
 class Board:
-    """Representação interna de um tabuleiro do Puzzle Nuruomino."""
-    def __init__(self, board=np.array([[1]], dtype=np.int8), haspiece=np.array([1], dtype=np.bool),
-                 regions=np.array([1], dtype=np.int8)):
+    """
+    Representação interna de um tabuleiro do Puzzle Nuruomino.
+
+    Args:
+        board (np.ndarray): A matriz com identificadores de regiões.
+        haspiece (list[bool]): Flags indicando se cada região já tem uma peça.
+        regions (list[str]): Lista das regiões presentes.
+    """
+    def __init__(self, board=None, haspiece=None, regions=None, cells=None):
+        if board is None:
+            board = np.array([[1]], dtype=object)
+
         self.board = board
+        
+        self.height, self.width = self.board.shape
 
-        if haspiece is None or len(haspiece) == 0:
+        if haspiece is None: # Não tem peças
             unique_regions = np.unique(board)
-            try:
-                region_count = max(int(x) for x in unique_regions)
-            except:
-                region_count = len(unique_regions)
-            self.haspiece = [np.bool(False)] * region_count
+            unique_regions_int = sorted([int(ur) for ur in unique_regions])
+            self.regions = unique_regions_int
+            region_count = len(self.regions)
+            self.haspiece = [False] * region_count
+            self.cells = [[] for _ in range(region_count)]
+            for r in range(self.height):
+                for c in range(self.width):
+                    self.cells[int(self.board[r, c]) - 1].append((r, c))
+            # Converte o cells de lista de lista para tuplo de tuplos
+            # pois deve permanecer imutável
+            self.cells = tuple(tuple(l) for l in self.cells)
         else:
+            # Se já houver peças colocadas
             self.haspiece = list(haspiece)
-
-        if regions is None or len(regions) == 0:
-            self.regions = np.unique(board)
-        else:
-            self.regions = list(regions)
+            self.cells = cells
+            self.regions = regions
 
     def __str__(self):
         """Devolve uma representação textual do tabuleiro."""
-        formatted_board = ""
-        for row in self.board:
-            formatted_board += "\t".join(str(cell) for cell in row) + "\n"
-        return formatted_board
+        return '\n'.join('\t'.join(str(cell) for cell in row) for row in self.board)
+    
+    
+    def makes_2x2(self, piece_coordinates: list[tuple[int, int]]) -> bool:
+        """
+        Verifica se a colocação de uma peça formaria um quadrado 2x2
+        """
+        piece_set = set(piece_coordinates)
+
+        # Quadrados verificados
+        checked_Os = set()
+        
+        # Vê a região que rodeia a peça
+        for r, c in piece_set:
+            for dr, dc in [(-1, -1), (-1, 0), (0, -1), (0, 0)]:
+                piece_r, piece_c = r + dr, c + dc
+
+                # Check bounds for the top-left corner of potential 2x2 square
+                if not (0 <= piece_r < self.board.shape[0] - 1 and 0 <= piece_c < self.board.shape[1] - 1):
+                    continue
+                
+                if (piece_r, piece_c) in checked_Os:
+                    continue
+                    
+                # Marca a posição como verificada
+                checked_Os.add((piece_r, piece_c))
+
+                # Define as coordenadas do quadrado
+                square = [(piece_r, piece_c), (piece_r, piece_c + 1), (piece_r + 1, piece_c), (piece_r + 1, piece_c + 1)]
+
+                # Vê se as coordenadas da peça formam um quadrado 2x2
+                count = 0
+                for square_r, square_c in square:
+                    # Double-check bounds for each square position (should be guaranteed by above check)
+                    if not (0 <= square_r < self.board.shape[0] and 0 <= square_c < self.board.shape[1]):
+                        continue
+                        
+                    if (square_r, square_c) in piece_set:
+                        count += 1
+                    else: 
+                        if self.board[square_r, square_c] in MARKS:
+                            count += 1
+                
+                if count == 4:
+                    return True
+        return False
     
     def can_place(self, shape: list[tuple[int, int]], origin: tuple[int, int], region_id: int, mark: str) -> bool:
-        """Verifica se é possível colocar a forma no tabuleiro a partir de `origin`, respeitando os limites da região."""
-        frontier = False
-        marks = np.array(['L', 'I', 'T', 'S'])
-        if (self.haspiece[int(region_id) - 1]):
-            return False
-        for dr, dc in shape:
-            r, c = origin[0] + dr, origin[1] + dc
-            if not (0 <= r < self.board.shape[0] and 0 <= c < self.board.shape[1]):
-                return False  # fora do tabuleiro
-            if self.board[r, c] != region_id:
-                return False  # fora da região
-            if (r - 1 >= 0 and self.board[r - 1, c] == mark):
-                return False # peça à esquerda igual
-            if (c - 1 >= 0 and self.board[r, c - 1] == mark):
-                return False # peça em cima igual
-            if (r + 1 < self.board.shape[0] and self.board[r + 1, c] == mark):
-                return False # peça à direita igual
-            if (c + 1 < self.board.shape[1] and self.board[r, c + 1] == mark):
-                return False # peça em baixo igual
-            if ((c + 1 < self.board.shape[1] and (self.board[r, c + 1] == 'L' or self.board[r, c + 1] == 'I'
-                    or self.board[r, c + 1] == 'T' or self.board[r, c + 1] == 'S')) 
-                    and (r + 1 < self.board.shape[0] and (self.board[r + 1, c] == 'L'
-                    or self.board[r + 1, c] == 'I' or self.board[r + 1, c] == 'T'
-                    or self.board[r + 1, c] == 'S')) and (r + 1 < self.board.shape[0] and c + 1 < self.board.shape[1]
-                    and (self.board[r + 1, c + 1] == 'L' or self.board[r + 1, c + 1] == 'I'
-                    or self.board[r + 1, c + 1] == 'T' or self.board[r + 1, c + 1] == 'S'))):
-                return False # peça forma quadrado (canto superior esquerdo)
-            if ((c - 1 >= 0 and (self.board[r, c - 1] == 'L' or self.board[r, c - 1] == 'I'
-                    or self.board[r, c - 1] == 'T' or self.board[r, c - 1] == 'S')) 
-                    and (r + 1 < self.board.shape[0] and (self.board[r + 1, c] == 'L'
-                    or self.board[r + 1, c] == 'I' or self.board[r + 1, c] == 'T'
-                    or self.board[r + 1, c] == 'S')) and (r + 1 < self.board.shape[0] and c - 1 >= 0
-                    and (self.board[r + 1, c - 1] == 'L' or self.board[r + 1, c - 1] == 'I'
-                    or self.board[r + 1, c - 1] == 'T' or self.board[r + 1, c - 1] == 'S'))):
-                return False # peça forma quadrado (canto superior direito)
-            if ((c + 1 < self.board.shape[1] and (self.board[r, c + 1] == 'L' or self.board[r, c + 1] == 'I'
-                    or self.board[r, c + 1] == 'T' or self.board[r, c + 1] == 'S')) 
-                    and (r - 1 >= 0 and (self.board[r - 1, c] == 'L'
-                    or self.board[r - 1, c] == 'I' or self.board[r - 1, c] == 'T'
-                    or self.board[r - 1, c] == 'S')) and (r - 1 >= 0 and c + 1 < self.board.shape[1]
-                    and (self.board[r - 1, c + 1] == 'L' or self.board[r - 1, c + 1] == 'I'
-                    or self.board[r - 1, c + 1] == 'T' or self.board[r - 1, c + 1] == 'S'))):
-                return False # peça forma quadrado (canto inferior esquerdo)
-            if ((c - 1 >= 0 and (self.board[r, c - 1] == 'L' or self.board[r, c - 1] == 'I'
-                    or self.board[r, c - 1] == 'T' or self.board[r, c - 1] == 'S')) 
-                    and (r - 1 >= 0 and (self.board[r - 1, c] == 'L'
-                    or self.board[r - 1, c] == 'I' or self.board[r - 1, c] == 'T'
-                    or self.board[r - 1, c] == 'S')) and (r - 1 >= 0 and c - 1 >= 0
-                    and (self.board[r - 1, c - 1] == 'L' or self.board[r - 1, c - 1] == 'I'
-                    or self.board[r - 1, c - 1] == 'T' or self.board[r - 1, c - 1] == 'S'))):
-                return False # peça forma quadrado (canto inferior direito)
-            adj_values = self.adjacent_values(r, c, False)
-            if any(val in marks for val in adj_values):
-                frontier = True
-        if frontier:
-            return True
-        if not any(self.haspiece):
-            return True
-        return False
-    
-    def new_can_place(self, shape: list[tuple[int, int]], origin: tuple[int, int], region_id: int, mark: str) -> bool:
-        """Verifica se é possível colocar a forma no tabuleiro a partir de `origin`, respeitando os limites da região."""
-
-        # Check if region already has a piece
-        if self.haspiece[int(region_id) - 1]:
+        """
+        Verifica se é possível colocar a forma no tabuleiro a partir de origin, de acordo com a regras
+        """
+        # Verifica se a região já está preenchida
+        region_index = int(region_id) - 1  # Convert to 0-based index for haspiece array
+        if region_index < 0 or region_index >= len(self.haspiece) or self.haspiece[region_index]:
             return False
         
-        # Get all positions the shape would occupy
-        positions = [(origin[0] + dr, origin[1] + dc) for dr, dc in shape]
+        piece_positions = []
+        # Fronteira declara que se a peça está em contacto com uma peça já colocada
+        fronter = False
 
-        # Check if all positions are inside the board and in the correct region
-        for r, c in positions:
-            if not (0 <= r < self.board.shape[0] and 0 <= c < self.board.shape[1]):
+        for dr, dc in shape:
+            r, c = origin[0] + dr, origin[1] + dc
+            
+            # Verifica se a posição está dentro dos limites do tabuleiro
+            if not (0 <= r < self.height and 0 <= c < self.width):
                 return False
-            if self.board[r, c] != region_id:
+            
+            value = self.board[r, c]
+            if isinstance(value, str) and value.isdigit():
+                value = int(value)
+            
+            # A peça não pode sair da região - compare with original region_id (1-based)
+            if not (isinstance(value, (int, np.integer)) and value == region_id):
                 return False
+            
+            piece_positions.append((r, c))
 
-        # Check for adjacency and mark constraints
-        marks = np.array(['L', 'I', 'T', 'S'])
-        frontier = False
-        for r, c in positions:
-            adj_values = self.adjacent_values(r, c, False)
-            if any(val in marks for val in adj_values):
-                frontier = True
-
-        # Generate the grander region (region + adjacent positions)
-        grander_region = set(self.adjacent_positions(positions[0][0], positions[0][1], diag=False, grand_region=True))
-
-        # Check for O_SHAPE (2x2 square) anywhere in the grander region
-        for gr, gc in grander_region:
-            square = {(gr + dr, gc + dc) for dr, dc in O_SHAPE}
-            if square.issubset(grander_region):
-                # Only fail if all 4 cells are part of the piece being placed
-                if square.issubset(set(positions)):
+            # Garante que a peça não estaria em contacto com uma peça igual
+            for adjacent_r, adjacent_c in DIRECTIONS:
+                adj_r, adj_c = r + adjacent_r, c + adjacent_c
+                if (0 <= adj_r < self.height and 0 <= adj_c < self.width and 
+                    self.board[adj_r, adj_c] == mark):
                     return False
-
-        if frontier:
-            return True
-        if not any(self.haspiece):
-            return True
-        return False
-
-    def region_cells(self, region_id: int) -> list[tuple[int, int]]:
-        """Devolve a lista de posições (row, col) pertencentes a uma região."""
-        positions = list(zip(*np.where(self.board == region_id)))
-        return positions
+                
+            # Garante que a peça está em contacto com pelo menos uma peça já colocada
+            if not fronter: 
+                for adjacent_r, adjacent_c in DIRECTIONS:
+                    adj_r, adj_c = r + adjacent_r, c + adjacent_c
+                    if (0 <= adj_r < self.height and 0 <= adj_c < self.width and
+                        self.board[adj_r, adj_c] in MARKS):
+                        fronter = True
+                        break
+        
+        # Vê se a peça faz um O (2x2 square)
+        if self.makes_2x2(piece_positions):
+            return False
+        
+        # Devolve se a peça pode ser colocada
+        # Se a peça é a primeira, não é preciso que faça fronteira
+        return fronter or not any(self.haspiece)
     
     def place(self, shape: list[tuple[int, int]], origin: tuple[int, int], mark) -> 'Board':
         """Retorna uma nova instância de Board com a peça colocada, marcada com `mark`."""
-        new_board = np.copy(self.board)
+        new_board_array = self.board.copy()
         for dr, dc in shape:
-            r, c = origin[0] + dr, origin[1] + dc
-            new_board[r, c] = mark
-        return Board(new_board, np.copy(self.haspiece), np.copy(self.regions))
+            new_board_array[origin[0] + dr, origin[1] + dc] = mark
+        
+        new_haspiece = self.haspiece.copy()
+        
+        region_id = self.board[origin[0], origin[1]]
+        new_haspiece[int(region_id) - 1] = True
+
+        return Board(new_board_array, new_haspiece, self.regions, self.cells)
 
     def adjacent_regions(self, region:int, diag: bool) -> list:
         """Devolve uma lista das regiões que fazem fronteira com a região enviada no argumento."""
         regions = set()
-        
-        adjacent_cells = self.adjacent_positions(*self.region_cells(region)[0], diag)
+        region_cells = self.cells[int(region) - 1]
+
+        adjacent_cells = self.adjacent_positions(*region_cells[0], diag)
 
         for r, c in adjacent_cells:
             if self.board[r, c] != region:
@@ -219,43 +246,28 @@ class Board:
         
         return list(regions)
     
-    def adjacent_positions(self, row:int, col:int, diag: bool, grand_region: bool = False) -> list:
+    def adjacent_positions(self, r: int, c: int, diag = False) -> list:
         """
-        Devolve as posições adjacentes à região, em todas as direções, incluindo diagonais.
-        Se grand_region for True, devolve a região combinada com as posições adjacentes.
-        A ordem das posições segue a ordem de leitura do tabuleiro (linha a linha, esquerda para direita).
+        Retorna uma lista de posições adjacentes da posição (r, c) do tabuleiro.
+        Se diag = True, consideramos as diagonais
         """
         adjacent = set()
-        rows, cols = self.board.shape
-
+        
         if diag:
-            directions = [  (-1, -1),   (-1, 0),    (-1, 1),
-                            (0, -1),                (0, 1),
-                            (1, -1),    (1, 0),     (1, 1)  ]
+            directions = [(-1,0),(1,0),(0,-1),(0,1)]
         else:
-            directions = [(-1, 0), (0, -1), (0, 1), (1, 0)]
-
-        region = self.board[row, col]
-        region_cells = self.region_cells(region)
-
-        for r, c in region_cells: 
+            directions = [  (-1, -1), (-1, 0), (-1, 1),
+                            (0, -1),           (0, 1),
+                            (1, -1),  (1, 0),  (1, 1)  ]
+        
+        if 0 <= r < self.height and 0 <= c < self.width:
             for dr, dc in directions:
                 nr, nc = r + dr, c + dc
-                if 0 <= nr < rows and 0 <= nc < cols:
-                    if self.board[nr, nc] != region:
-                        adjacent.add((nr, nc))
+                if 0 <= nr < self.height and 0 <= nc < self.width:
+                    adjacent.add((nr, nc))
 
-        # To preserve board order, sort by (row, col)
-        region_cells_sorted = sorted(region_cells)
-        adjacent_sorted = sorted(adjacent)
-
-        if grand_region:
-            # Combine and sort all positions by (row, col)
-            combined = sorted(set(region_cells_sorted) | set(adjacent_sorted))
-            return combined
-        else:
-            return adjacent_sorted
-
+        return list(adjacent)
+    
     def adjacent_values(self, row:int, col:int, diag: bool) -> list:
         """Devolve os valores das celulas adjacentes à posição, em todas as direções, incluindo diagonais.
         Formato: [LeftTopDiag, , Top, RightTopDiag, Left, Right, , BottomLeftDiag, Bottom, BottomRightDiag]"""
@@ -274,55 +286,94 @@ class Board:
                 values = np.append(values, self.board[r][c])
 
         return values
-    
+
     @staticmethod
     def parse_instance() -> 'Board':
-        """Lê o test do standard input (stdin) que é passado como argumento
-        e retorna uma instância da classe Board.
-
-        Por exemplo:
-            $ python3 pipe.py < test-01.txt
-
-            > from sys import stdin
-            > line = stdin.readline().split()
         """
-        board_list = []
+        Lê o test do standard input (stdin) que é passado como argumento
+        e retorna uma instância da classe Board.
+        """
+        lines = []
+        for line in stdin:
+            line = line.strip()
+            if line:
+                lines.append(line.split())
 
-        for line in stdin.readlines():
-            line_ar = [elem for elem in line.split()]
-            board_list.append(line_ar)
-        board = np.array(board_list, dtype = 'U1')
-
-        return Board(board, [], [])
-
-    # TODO: outros metodos da classe Board
+        board_data = np.array(lines, dtype=object)
+        
+        return Board(board_data)
 
 class Nuruomino(Problem):
     def __init__(self, board: Board):
         super().__init__(NuruominoState(board))
+        # Contador de estados visitados (para debugging)
+        self.cnt = 0
+        
+        # Atribuir prioridade às peças diferentes 
+        # (de acordo com o número quadrados que cada peça de facto ocupa,
+        # ou seja, tendo em conta o facto de o S e o T, fazerem com que
+        # dois quadrados seja impossíveis, o L, um quadrado e o I, 0)
+        self.action_priority = {'S': 0, 'T': 1, 'L': 2, 'I': 3}
+
+        # Gerar as ações iniciais (pré-computação)
+        self.potential_actions = self._generate_potential_actions(board)
+        
+    def _generate_potential_actions(self, board: Board):
+        """
+        Gera todas as ações que podem ser feitas no tabuleiro, ordenadas
+        pela prioridade das peças
+        """
+        potential_actions = {}
+        for region_id in board.regions:
+            region = int(region_id) - 1 
+            region_cells = board.cells[region]
+
+            region_actions = []
+            for origin in region_cells:
+                for mark, shapes in PIECES.items():
+                    for shape in shapes:
+                        region_actions.append((region_id, shape, origin, mark))
+            
+            region_actions.sort(key=lambda x: self.action_priority[x[3]])
+            potential_actions[region_id] = region_actions
+
+        return potential_actions    
 
     def actions(self, state: NuruominoState):
         """Gera todas as formas válidas de colocar uma peça no estado atual."""
-        actions = []
         board = state.board
-        regions = board.regions
-        for region_id in regions:
-            region_cells = board.region_cells(region_id)
-            for origin in region_cells:
-                for shape_group, mark in zip(
-                    [L_SHAPES, I_SHAPES, T_SHAPES, S_SHAPES],
-                    ['L', 'I', 'T', 'S']
-                ):
-                    for shape in shape_group:
-                        if board.can_place(shape, origin, region_id, mark):
-                            actions.append((region_id, shape, origin, mark))
+
+        empty_regions_ids = [
+            region_id for region_id in board.regions if not board.haspiece[region_id - 1]
+        ]
+        for region_id in empty_regions_ids:
+            inference_region_cells = board.cells[int(region_id) - 1]
+            if len(inference_region_cells) == 4:
+                for action in self.potential_actions[region_id]:
+                    if board.can_place(action[1], action[2], action[0], action[3]):
+                        return [action]
+                    
+        actions_by_region_size = []
+        for region_id in empty_regions_ids: # Não fez inferências
+            region_size = len(board.cells[region_id - 1])
+            region_actions = []
+            for action in self.potential_actions[region_id]:
+                if board.can_place(action[1], action[2], action[0], action[3]):
+                    region_actions.append(action)
+            if region_actions:
+                actions_by_region_size.append((region_size, region_actions))
+        
+        actions_by_region_size.sort(key=lambda x: x[0]) # Sort pelo tamanho da região
+
+        actions = []
+        for _, actions_list in actions_by_region_size:
+            actions.extend(actions_list) # Dá flatten à lista
+            
         return actions
 
     def result(self, state: NuruominoState, action) -> NuruominoState:
         """Retorna o estado resultante de executar a 'action' sobre 'state'."""
-        region_id, shape, origin, mark = action
-        new_board = state.board.place(shape, origin, mark)
-        new_board.haspiece[int(region_id) - 1] = np.bool(True)
+        new_board = state.board.place(action[1], action[2], action[3])
         return NuruominoState(new_board)
         
 
@@ -330,45 +381,33 @@ class Nuruomino(Problem):
         """Retorna True se e só se o estado passado como argumento é
         um estado objetivo. Deve verificar se todas as posições do tabuleiro
         estão preenchidas de acordo com as regras do problema."""
-        if len(self.actions(state)) == 0 and not(np.bool(False) in state.board.haspiece):
-            return True
-        else:
-            return False
+        self.cnt += 1
+        return all(state.board.haspiece) # Verifica se tem uma peça em todas as regiões
 
     def h(self, node: Node):
-        """Função heuristica utilizada para a procura A*."""
-        # TODO
-        pass
+        """Retorna o nº de regiões por preencher no board"""
+        regioes_a_preencher = sum(not haspiece for haspiece in node.state.board.haspiece)
+        return regioes_a_preencher
+
+
+
 
 if __name__ == "__main__":
     # Ler o tabuleiro do standard input e cria uma instância da classe Board
     problem_board = Board.parse_instance()
 
-    #print(problem_board.haspiece)
-    
-    #print(problem_board)
     # Criar uma instância do problema
     problem = Nuruomino(problem_board)
 
     # Criar o estado inicial do problema
     initial_state = NuruominoState(problem_board)
-    #s1 = problem.result(initial_state, (np.str_('1'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(0)), 'L'))
-    #print(s1.board)
-    #print(problem.actions(initial_state))
-    #s2 = problem.result(s1,(np.str_('5'), frozenset({(1, 0), (2, 0), (0, 0), (3, 0)}), (np.int64(2), np.int64(5)), 'I'))
-    #print(s2.board.haspiece)
-    #s3 = problem.result(s2,(np.str_('4'), frozenset({(0, 1), (1, 0), (0, 2), (0, 0)}), (np.int64(4), np.int64(0)), 'L'))
-    #s4 = problem.result(s3,(np.str_('2'), frozenset({(0, 1), (1, 0), (1, 1), (2, 1)}), (np.int64(0), np.int64(2)), 'T'))
-    #s5 = problem.result(s4, (np.str_('3'), frozenset({(1, 0), (0, 1), (2, 0), (0, 0)}), (np.int64(0), np.int64(4)), 'L'))
-    #print(s3.board)
-    #print(s4.board)
-    #print(s5.board)
-    #print(s5.board.adjacent_values(1, 0))
-    #print(problem.actions(s4))
-    #print(problem.goal_test(s5))
-    # result = depth_first_tree_search(problem)
-    # if result is not None:
-    #     result = result.state
-    #     print(result.board)
-    # else:
-    #     print("No solution found.")
+
+    # Faz a procura
+    result = depth_first_graph_search(problem)
+
+    # Retorna o resultado
+    if result is not None:
+        result = result.state
+        print(result.board)
+    else:
+        print("No solution found.")
