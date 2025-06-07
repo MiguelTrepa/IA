@@ -358,36 +358,47 @@ class Nuruomino(Problem):
         return potential_actions    
 
     def actions(self, state: NuruominoState):
-        """Gera todas as formas válidas de colocar uma peça no estado atual."""
         board = state.board
 
         empty_regions_ids = [
             region_id for region_id in board.regions if not board.haspiece[region_id - 1]
         ]
 
-        for region_id in empty_regions_ids:
-            inference_region_cells = board.cells[region_id]
-            if len(inference_region_cells) == 4:
-                for action in self.potential_actions[region_id]:
-                    if board.can_place(action[0], action[1], action[2], action[3]):
-                        return [action]
-                    
-        actions_by_region_size = []
-        for region_id in empty_regions_ids: # Não fez inferências
-            region_size = len(board.cells[region_id])
-            region_actions = []
-            for action in self.potential_actions[region_id]:
-                if board.can_place(action[0], action[1], action[2], action[3]):
-                    region_actions.append(action)
-            if region_actions:
-                actions_by_region_size.append((region_size, region_actions))
-        
-        actions_by_region_size.sort(key=lambda x: x[0]) # Sort pelo tamanho da região
+        # Gather valid actions for each region
+        region_action_counts = []
+        region_actions_dict = {}
 
+        for region_id in empty_regions_ids:
+            region_actions = [
+                action for action in self.potential_actions[region_id]
+                if board.can_place(action[0], action[1], action[2], action[3])
+            ]
+            if region_actions:
+                region_action_counts.append(len(region_actions))
+                region_actions_dict[region_id] = region_actions
+
+        if not region_action_counts:
+            return []
+
+        # Find the minimum, second minimum, and third minimum number of actions
+        sorted_counts = sorted(set(region_action_counts))
+        if len(sorted_counts) >= 3:
+            third_min = sorted_counts[2]
+        else:
+            third_min = sorted_counts[-1]  # Use the largest available if less than 3
+
+        # Collect actions for regions with less than the third minimum
         actions = []
-        for _, actions_list in actions_by_region_size:
-            actions.extend(actions_list) # Dá flatten à lista
-            
+        for region_id, region_actions in region_actions_dict.items():
+            if len(region_actions) < third_min:
+                actions.extend(region_actions)
+
+        # If nothing found (all regions have the same count or only one/two unique counts), fallback to all actions with the minimum or second minimum
+        if not actions:
+            for region_id, region_actions in region_actions_dict.items():
+                if len(region_actions) == third_min:
+                    actions.extend(region_actions)
+
         return actions
 
     def result(self, state: NuruominoState, action) -> NuruominoState:
