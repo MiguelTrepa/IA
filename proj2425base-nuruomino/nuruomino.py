@@ -195,23 +195,15 @@ class Board:
         if region_index < 0 or region_index >= len(self.haspiece) or self.haspiece[region_index]:
             return False
         
-        piece_positions = []
         # Fronteira declara que se a peça está em contacto com uma peça já colocada
         fronter = False
 
+        # Verifica se a forma cabe no tabuleiro
+        if not self.fits(shape, origin):
+            return False
+
         for dr, dc in shape:
             r, c = origin[0] + dr, origin[1] + dc
-            
-            # Verifica se a posição está dentro dos limites do tabuleiro
-            if not (0 <= r < self.height and 0 <= c < self.width):
-                return False
-            
-            value = self.board[r, c]
-            # A peça não pode sair da região
-            if not value == region_id:
-                return False
-            
-            piece_positions.append((r, c))
 
             # Garante que a peça não estaria em contacto com uma peça igual
             for adjacent_r, adjacent_c in DIRECTIONS:
