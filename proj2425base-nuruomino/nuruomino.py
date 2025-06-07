@@ -143,7 +143,7 @@ class Board:
             for dr, dc in [(-1, -1), (-1, 0), (0, -1), (0, 0)]:
                 piece_r, piece_c = r + dr, c + dc
 
-                # Check bounds for the top-left corner of potential 2x2 square
+                # Verifica se o canto superior esquerdo está no tabuleiro
                 if not (0 <= piece_r < self.board.shape[0] - 1 and 0 <= piece_c < self.board.shape[1] - 1):
                     continue
                 
@@ -159,16 +159,13 @@ class Board:
                 # Vê se as coordenadas da peça formam um quadrado 2x2
                 count = 0
                 for square_r, square_c in square:
-                    # Double-check bounds for each square position (should be guaranteed by above check)
                     if not (0 <= square_r < self.board.shape[0] and 0 <= square_c < self.board.shape[1]):
                         continue
-                        
                     if (square_r, square_c) in piece_set:
                         count += 1
                     else: 
                         if self.board[square_r, square_c] in MARKS:
                             count += 1
-                
                 if count == 4:
                     return True
         return False
@@ -178,7 +175,7 @@ class Board:
         Verifica se é possível colocar a forma no tabuleiro a partir de origin, de acordo com a regras
         """
         # Verifica se a região já está preenchida
-        region_index = int(region_id) - 1  # Convert to 0-based index for haspiece array
+        region_index = int(region_id) - 1
         if region_index < 0 or region_index >= len(self.haspiece) or self.haspiece[region_index]:
             return False
         
