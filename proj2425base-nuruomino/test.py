@@ -60,7 +60,6 @@ def main() -> None:
 
     for case in txt_cases:
         elapsed, rc, out, err = run_one(args.solver, case, args.timeout)
-        total_time += elapsed
 
         expected_file = case.with_suffix(".out")
         if rc == TIMEOUT_RC:
@@ -71,6 +70,7 @@ def main() -> None:
             if compare(out, exp_text):
                 verdict = "PASS"
                 totals["pass_"] += 1
+                total_time += elapsed
             else:
                 verdict = "FAIL"
                 totals["fail"] += 1
