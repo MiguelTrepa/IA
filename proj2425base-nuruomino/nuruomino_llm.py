@@ -95,111 +95,92 @@ class Board:
     def makes_2x2(self, piece_coordinates: set[tuple[int, int]]) -> bool:
         """
         Optimized check to see if placing a piece would form a 2x2 square.
-        This version iterates through the piece coordinates and checks for existing
-        pieces in the 8 surrounding cells.
-        Receives `piece_coordinates` as a set for O(1) lookups.
+        Uses a more efficient approach by checking each potential 2x2 square only once.
         """
         height, width = self.board.shape
-
-        # Iterate through each cell of the *newly placed* piece
+        
+        # Get all potential top-left corners of 2x2 squares that could involve our piece
+        potential_corners = set()
         for r, c in piece_coordinates:
-            # Check for 2x2 squares that could be formed with (r, c) as any of its 4 corners
-            # (r, c) could be top-left, top-right, bottom-left, or bottom-right of a 2x2 square
-
-            # Potential top-left corners of a 2x2 square:
-            # (r, c) itself, (r, c-1), (r-1, c), (r-1, c-1)
-            for dr_tl, dc_tl in [(0, 0), (0, -1), (-1, 0), (-1, -1)]:
-                tl_r, tl_c = r + dr_tl, c + dc_tl
-
-                # Ensure the potential top-left corner is within bounds and
-                # that the entire 2x2 square would be within bounds.
-                if not (0 <= tl_r < height - 1 and 0 <= tl_c < width - 1):
-                    continue
-
-                # Define the 4 cells of the potential 2x2 square
-                square_cells = [
-                    (tl_r, tl_c),
-                    (tl_r, tl_c + 1),
-                    (tl_r + 1, tl_c),
-                    (tl_r + 1, tl_c + 1)
-                ]
-
-                # Check if all 4 cells of this potential 2x2 square are filled
-                filled_count = 0
-                for sq_r, sq_c in square_cells:
-                    # If the cell is part of the new piece, it's considered filled
-                    if (sq_r, sq_c) in piece_coordinates:
-                        filled_count += 1
-                    # If the cell is already marked with an existing piece (L, I, T, S), it's considered filled
-                    elif isinstance(self.board[sq_r, sq_c], str) and self.board[sq_r, sq_c] in MARKS:
-                        filled_count += 1
-                    else:
-                        # If any cell is empty (or a region ID), it's not a 2x2 square
-                        break
-
-                if filled_count == 4:
-                    return True # Found a 2x2 square
-
-        return False # No 2x2 square found after checking all possibilities
+            # For each piece cell, it could be part of 2x2 squares with these top-left corners:
+            for dr, dc in [(0, 0), (0, -1), (-1, 0), (-1, -1)]:
+                tl_r, tl_c = r + dr, c + dc
+                if 0 <= tl_r < height - 1 and 0 <= tl_c < width - 1:
+                    potential_corners.add((tl_r, tl_c))
+        
+        # Check each unique corner only once
+        for tl_r, tl_c in potential_corners:
+            square_cells = [
+                (tl_r, tl_c), (tl_r, tl_c + 1),
+                (tl_r + 1, tl_c), (tl_r + 1, tl_c + 1)
+            ]
+            
+            # Count filled cells in this 2x2 square
+            filled_count = 0
+            for sq_r, sq_c in square_cells:
+                if ((sq_r, sq_c) in piece_coordinates or 
+                    (isinstance(self.board[sq_r, sq_c], str) and self.board[sq_r, sq_c] in MARKS)):
+                    filled_count += 1
+                else:
+                    break  # Early exit if we find an empty cell
+            
+            if filled_count == 4:
+                return True
+        
+        return False
 
     def can_place(self, shape: list[tuple[int, int]], origin: tuple[int, int], region_id: int, mark: str) -> bool:
         """
-        Optimized check if it's possible to place the shape on the board from origin,
-        according to the Nuruomino rules.
+        Highly optimized placement validation with early exits and minimal redundant checks.
         """
-        height, width = self.board.shape
+        # 1. Cheapest check first: region already filled
         region_index = int(region_id) - 1
-
-        # 1. Early Exit: Check if the region is already filled (Most important, cheapest check)
         if region_index < 0 or region_index >= len(self.haspiece) or self.haspiece[region_index]:
             return False
-
-        piece_positions = []
-        is_first_piece = not any(self.haspiece) # Pre-calculate this once
-
-        # We also need to keep track of the *actual* region cells for the given region_id.
+        
+        height, width = self.board.shape
         current_region_cells_set = set(self.cells[region_index])
-
-        fronter_found = False # Flag for adjacency with existing pieces
-
+        is_first_piece = not any(self.haspiece)
+        
+        piece_positions = []
+        fronter_found = False
+        
+        # Pre-allocate for adjacency checks (avoid repeated tuple creation)
+        directions = DIRECTIONS  # Cache reference
+        
         for dr, dc in shape:
             r, c = origin[0] + dr, origin[1] + dc
-
-            # 2. Check bounds and if piece stays within its assigned region
-            if not (0 <= r < height and 0 <= c < width):
+            
+            # 2. Bounds and region membership check
+            if not (0 <= r < height and 0 <= c < width and (r, c) in current_region_cells_set):
                 return False
-            if (r, c) not in current_region_cells_set:
-                return False
-
-            # Combined Adjacency Check:
-            # Check for same-piece adjacency AND 'fronter' condition in one loop
-            for adj_dr, adj_dc in DIRECTIONS: # DIRECTIONS is non-diagonal
-                adj_r, adj_c = r + adj_dr, c + adj_dc
-                if 0 <= adj_r < height and 0 <= adj_c < width:
-                    adj_cell_value = self.board[adj_r, adj_c]
-                    # Same-piece adjacency check
-                    if adj_cell_value == mark:
-                        return False # Invalid placement due to same-piece adjacency
-
-                    # Fronter condition check (only if not the first piece and fronter not yet found)
-                    if not is_first_piece and not fronter_found and adj_cell_value in MARKS:
-                        fronter_found = True
-
+            
+            # 3. Combined adjacency and fronter check (single loop)
+            if not fronter_found or not is_first_piece:  # Skip if both conditions already met
+                for adj_dr, adj_dc in directions:
+                    adj_r, adj_c = r + adj_dr, c + adj_dc
+                    if 0 <= adj_r < height and 0 <= adj_c < width:
+                        adj_cell_value = self.board[adj_r, adj_c]
+                        
+                        # Same-piece adjacency check (most critical)
+                        if adj_cell_value == mark:
+                            return False
+                        
+                        # Fronter condition (only check if needed)
+                        if not is_first_piece and not fronter_found and adj_cell_value in MARKS:
+                            fronter_found = True
+            
             piece_positions.append((r, c))
-
-        # 5. Final check for 'fronter' condition
-        # If it's not the first piece, it *must* have touched an existing piece.
+        
+        # 4. Fronter validation (only for non-first pieces)
         if not is_first_piece and not fronter_found:
             return False
-
-        # Create piece_set once for makes_2x2
-        piece_set_for_2x2 = set(piece_positions)
-
-        # 6. Check for 2x2 square formation (most expensive check, do last)
-        if self.makes_2x2(piece_set_for_2x2):
+        
+        # 5. 2x2 check last (most expensive)
+        if self.makes_2x2(set(piece_positions)):
             return False
-
-        return True # All checks passed, placement is valid
+        
+        return True
 
     def place(self, shape: list[tuple[int, int]], origin: tuple[int, int], mark) -> 'Board':
         """Retorna uma nova instância de Board com a peça colocada, marcada com `mark`."""
