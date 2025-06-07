@@ -98,18 +98,25 @@ class Board:
         
         self.height, self.width = self.board.shape
 
-        if haspiece is None: # Não tem peças
+        # Se for a primeira vez que é criado o tabuleiro
+        if haspiece is None:
+            # Memoriza as regiões do tabuleiro
             unique_regions = np.unique(board)
             unique_regions_int = sorted([int(ur) for ur in unique_regions])
             self.regions = unique_regions_int
+
+            # Criamos um bool para cada região que indica se já tem uma peça colocada
             region_count = len(self.regions)
             self.haspiece = [False] * region_count
+
+            # Criamos uma lista de listas que guarda as coordenadas de cada região
             self.cells = [[] for _ in range(region_count)]
             for r in range(self.height):
                 for c in range(self.width):
                     self.cells[int(self.board[r, c]) - 1].append((r, c))
-            # Converte o cells de lista de lista para tuplo de tuplos
-            # pois deve permanecer imutável
+            
+            # Converte o cells de lista de listas para tuplo de tuplos
+            # Para ser imutável
             self.cells = tuple(tuple(l) for l in self.cells)
         else:
             # Se já houver peças colocadas
