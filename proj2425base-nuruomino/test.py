@@ -42,7 +42,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Run solver on every *.txt test and check against *.out.")
     ap.add_argument("cases_dir", type=Path, help="Folder containing tests.", default=Path("./sample-nuruominoboards"))
     ap.add_argument("--solver", type=Path, default=Path("./proj2425base-nuruomino/nuruomino.py"),)
-    ap.add_argument("--timeout", type=float, default=5.0)
+    ap.add_argument("--timeout", "-t", type=float, default=5.0)
     ap.add_argument("-o", "--show-output", action="store_true", help="Print solver stdout / stderr.")
     args = ap.parse_args()
 

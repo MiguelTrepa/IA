@@ -45,6 +45,11 @@ PIECES = {
     ]
 }
 
+# Sets das formas únicas para melhorar procura 
+# Apenas usado para verificar se uma peça faz um quadrado 2x2
+SHAPE_SETS = {id(shape): frozenset(shape)
+              for shapes in PIECES.values() for shape in shapes}
+
 # Direções adjacentes sem diagonal
 DIRECTIONS = ((-1,0), (1,0), (0,-1), (0,1))
 # Direções adjacentes com diagonal
@@ -92,7 +97,7 @@ class Board:
     """
     def __init__(self, board=None, haspiece=None, regions=None, cells=None):
         if board is None:
-            board = np.array([[1]], dtype=object)
+            exit("Tabuleiro não fornecido. Certifique-se de que o input está correto.")
 
         self.board = board
         
@@ -138,7 +143,8 @@ class Board:
         """
         Verifica se a colocação de uma peça formaria um quadrado 2x2
         """
-        # Converte a peça para um set para proura em O(1)
+        # Usamos o set de peças para procura mais rápida
+        piece = SHAPE_SETS[id(piece)]
         r0, c0 = origin
         # Ajusta as coordenadas da peça
         piece = {(r + r0, c + c0) for r, c in piece}
@@ -198,10 +204,6 @@ class Board:
         # Fronteira declara que se a peça está em contacto com uma peça já colocada
         fronter = False
 
-        # Verifica se a forma cabe no tabuleiro
-        if not self.fits(shape, origin):
-            return False
-
         for dr, dc in shape:
             r, c = origin[0] + dr, origin[1] + dc
 
@@ -242,59 +244,65 @@ class Board:
 
         return Board(new_board_array, new_haspiece, self.regions, self.cells)
 
-    def adjacent_regions(self, region:int, diag: bool) -> list:
-        """Devolve uma lista das regiões que fazem fronteira com a região enviada no argumento."""
-        regions = set()
-        region_cells = self.cells[region]
+    # def adjacent_regions(self, region:int, diag: bool) -> list:
+    #     """Devolve uma lista das regiões que fazem fronteira com a região enviada no argumento."""
+    #     # regions = set()
+    #     # region_cells = self.cells[region]
 
-        adjacent_cells = self.adjacent_positions(*next(iter(region_cells)), diag)
+    #     # adjacent_cells = self.adjacent_positions(*next(iter(region_cells)), diag)
 
-        for r, c in adjacent_cells:
-            if self.board[r, c] != region:
-                regions.add(self.board[r, c])
+    #     # for r, c in adjacent_cells:
+    #     #     if self.board[r, c] != region:
+    #     #         regions.add(self.board[r, c])
         
-        return list(regions)
-    
-    def adjacent_positions(self, r: int, c: int, diag = False) -> list:
-        """
-        Retorna uma lista de posições adjacentes da posição (r, c) do tabuleiro.
-        Se diag = True, consideramos as diagonais
-        """
-        adjacent = set()
+    #     # return list(regions)
+    #     pass
+
+    # def adjacent_positions(self, r: int, c: int, diag = False) -> list:
+    #     """
+    #     Retorna uma lista de posições adjacentes da posição (r, c) do tabuleiro.
+    #     Se diag = True, consideramos as diagonais
+    #     """
+    #     # adjacent = set()
         
-        if diag:
-            directions = [(-1,0),(1,0),(0,-1),(0,1)]
-        else:
-            directions = [  (-1, -1), (-1, 0), (-1, 1),
-                            (0, -1),           (0, 1),
-                            (1, -1),  (1, 0),  (1, 1)  ]
+    #     # if diag:
+    #     #     directions = [(-1,0),(1,0),(0,-1),(0,1)]
+    #     # else:
+    #     #     directions = [  (-1, -1), (-1, 0), (-1, 1),
+    #     #                     (0, -1),           (0, 1),
+    #     #                     (1, -1),  (1, 0),  (1, 1)  ]
         
-        if 0 <= r < self.height and 0 <= c < self.width:
-            for dr, dc in directions:
-                nr, nc = r + dr, c + dc
-                if 0 <= nr < self.height and 0 <= nc < self.width:
-                    adjacent.add((nr, nc))
+    #     # if 0 <= r < self.height and 0 <= c < self.width:
+    #     #     for dr, dc in directions:
+    #     #         nr, nc = r + dr, c + dc
+    #     #         if 0 <= nr < self.height and 0 <= nc < self.width:
+    #     #             adjacent.add((nr, nc))
 
-        return list(adjacent)
-    
-    def adjacent_values(self, row:int, col:int, diag: bool) -> list:
-        """Devolve os valores das celulas adjacentes à posição, em todas as direções, incluindo diagonais.
-        Formato: [LeftTopDiag, , Top, RightTopDiag, Left, Right, , BottomLeftDiag, Bottom, BottomRightDiag]"""
-        values = np.array([])
+    #     # return list(adjacent)
+    #     pass
 
-        if diag:
-            directions = [  (-1, -1),   (-1, 0),    (-1, 1),
-                            (0, -1),                (0, 1),
-                            (1, -1),    (1, 0),     (1, 1)  ]
-        else:
-            directions = [(-1, 0), (0, -1), (0, 1), (1, 0)]
+    # def adjacent_values(self, row:int, col:int, diag: bool) -> list:
+    #     """
+    #     Devolve os valores das celulas adjacentes à posição, em todas as direções, incluindo diagonais.
+    #     Formato: [LeftTopDiag, , Top, RightTopDiag, Left, Right, , BottomLeftDiag, Bottom, BottomRightDiag]
+    #     """
+    #     # Função não usada
+    #     # values = np.array([])
 
-        for dr, dc in directions:
-            r, c = row + dr, col + dc
-            if 0 <= r < self.board.shape[0] and 0 <= c < self.board.shape[1]:
-                values = np.append(values, self.board[r][c])
+    #     # if diag:
+    #     #     directions = [  (-1, -1),   (-1, 0),    (-1, 1),
+    #     #                     (0, -1),                (0, 1),
+    #     #                     (1, -1),    (1, 0),     (1, 1)  ]
+    #     # else:
+    #     #     directions = [(-1, 0), (0, -1), (0, 1), (1, 0)]
 
-        return values
+    #     # for dr, dc in directions:
+    #     #     r, c = row + dr, col + dc
+    #     #     if 0 <= r < self.board.shape[0] and 0 <= c < self.board.shape[1]:
+    #     #         values = np.append(values, self.board[r][c])
+
+    #     # return values
+    #     pass
 
     @staticmethod
     def parse_instance() -> 'Board':
@@ -356,6 +364,7 @@ class Nuruomino(Problem):
         empty_regions_ids = [
             region_id for region_id in board.regions if not board.haspiece[region_id - 1]
         ]
+
         for region_id in empty_regions_ids:
             inference_region_cells = board.cells[region_id]
             if len(inference_region_cells) == 4:
