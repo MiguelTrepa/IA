@@ -101,8 +101,7 @@ class Board:
         # Se for a primeira vez que é criado o tabuleiro
         if haspiece is None:
             # Memoriza as regiões do tabuleiro
-            unique_regions = np.unique(board)
-            unique_regions_int = sorted([int(ur) for ur in unique_regions])
+            unique_regions_int = sorted(region for region in np.unique(board))
             self.regions = unique_regions_int
 
             # Criamos um bool para cada região que indica se já tem uma peça colocada
@@ -110,14 +109,11 @@ class Board:
             self.haspiece = [False] * region_count
 
             # Criamos uma lista de listas que guarda as coordenadas de cada região
-            self.cells = [[] for _ in range(region_count)]
+            region_cells = {rid: set() for rid in unique_regions_int}
             for r in range(self.height):
                 for c in range(self.width):
-                    self.cells[int(self.board[r, c]) - 1].append((r, c))
-            
-            # Converte o cells de lista de listas para tuplo de tuplos
-            # Para ser imutável
-            self.cells = tuple(tuple(l) for l in self.cells)
+                    region_cells[self.board[r, c]].add((r, c))
+            self.cells = region_cells
         else:
             # Se já houver peças colocadas
             self.haspiece = list(haspiece)
@@ -128,71 +124,118 @@ class Board:
         """Devolve uma representação textual do tabuleiro."""
         return '\n'.join('\t'.join(str(cell) for cell in row) for row in self.board)
     
-    def makes_2x2(self, piece_coordinates: set[tuple[int, int]]) -> bool:
-        """ Verifica se a peça forma um quadrado 2x2"""
-        height, width = self.board.shape
-        
-        corners = set()
-        for r, c in piece_coordinates:
-            for dr, dc in [(0, 0), (0, -1), (-1, 0), (-1, -1)]:
-                top_left_corner_r, top_left_corner_c = r + dr, c + dc
-                # Verifica que os cantos estão no tabuleiro
-                if 0 <= top_left_corner_r < height - 1 and 0 <= top_left_corner_c < width - 1:
-                    corners.add((top_left_corner_r, top_left_corner_c))
-        
-        for top_left_corner_r, top_left_corner_c in corners:
-            square_cells = [
-                (top_left_corner_r, top_left_corner_c), (top_left_corner_r, top_left_corner_c + 1),
-                (top_left_corner_r + 1, top_left_corner_c), (top_left_corner_r + 1, top_left_corner_c + 1)
-            ]
-            
-            filled_count = 0
-            for sq_r, sq_c in square_cells:
-                if ((sq_r, sq_c) in piece_coordinates or 
-                    (isinstance(self.board[sq_r, sq_c], str) and self.board[sq_r, sq_c] in MARKS)):
-                    filled_count += 1 # Tem um marca da peça
-            
-            if filled_count == 4: # Forma quadrao
-                return True
-        
+    def region_at(self, r: int, c: int) -> int:
+        """
+        Retorna o ID da região na posição (r, c) do tabuleiro.
+        Se a posição estiver fora dos limites, retorna None.
+        """
+        if 0 <= r < self.height and 0 <= c < self.width:
+            return self.board[r, c]
+        return None
+    
+    
+    def makes_2x2(self, origin: tuple[int, int], piece: list[tuple[int, int]]) -> bool:
+        """
+        Verifica se a colocação de uma peça formaria um quadrado 2x2
+        """
+        # Converte a peça para um set para proura em O(1)
+        r0, c0 = origin
+        # Ajusta as coordenadas da peça
+        piece = {(r + r0, c + c0) for r, c in piece}
+        board, width, height = self.board, self.width, self.height
+
+        # Vê a região que rodeia a peça
+        for r, c in piece:
+            for dr in (-1, 0, 1):
+                for dc in (-1, 0, 1):
+                    piece_r, piece_c = r + dr, c + dc
+
+                    if not (0 <= piece_r < height - 1 and 0 <= piece_c < width - 1):
+                        continue
+
+                    filled = 0
+
+                    if (piece_r, piece_c) in piece or board[piece_r, piece_c] in MARKS:
+                        filled += 1
+                    if (piece_r, piece_c + 1) in piece or board[piece_r, piece_c + 1] in MARKS:
+                        filled += 1
+                    if (piece_r + 1, piece_c) in piece or board[piece_r + 1, piece_c] in MARKS:
+                        filled += 1
+                    if (piece_r + 1, piece_c + 1) in piece or board[piece_r + 1, piece_c + 1] in MARKS:
+                        filled += 1
+                    
+                    if filled == 4:
+                        return True
         return False
     
-    def can_place(self, shape: list[tuple[int, int]], origin: tuple[int, int], region_id: int, mark: str) -> bool:
-        """ Verifica se é possível colocar uma peça"""
-
-        region_index = int(region_id) - 1
-        if region_index < 0 or region_index >= len(self.haspiece) or self.haspiece[region_index]: # região já tem peça
-            return False
-        
-        height, width = self.board.shape
-        current_region_cells = set(self.cells[region_index])
-        is_first_piece = not any(self.haspiece)
-        piece_positions = []
-        frontier = False
-        directions = DIRECTIONS
-        
+    def fits(self, shape: list[tuple[int, int]], origin: tuple[int, int]) -> bool:
+        """
+        Verifica se a forma pode ser colocada no tabuleiro a partir de origin.
+        Não verifica se a região já está preenchida.
+        """
+        region = self.region_at(origin[0], origin[1])
         for dr, dc in shape:
             r, c = origin[0] + dr, origin[1] + dc
-            if not (0 <= r < height and 0 <= c < width and (r, c) in current_region_cells): # Fora do tabuleiro
+            
+            # Verifica se a posição está dentro dos limites do tabuleiro
+            if not (0 <= r < self.height and 0 <= c < self.width):
                 return False
-            if not frontier or not is_first_piece: 
-                for adjacent_dr, adjacent_dc in directions:
-                    adjacent_r, adjacent_c = r + adjacent_dr, c + adjacent_dc
-                    if 0 <= adjacent_r < height and 0 <= adjacent_c < width:
-                        adjacent_cell_value = self.board[adjacent_r, adjacent_c]
-                        if adjacent_cell_value == mark: # Tem peça adjacente igual
-                            return False
-                        if not is_first_piece and not frontier and adjacent_cell_value in MARKS:
-                            frontier = True
+            
+            value = self.board[r, c]
+            if not value == region:
+                return False
+        return True
+    
+    def can_place(self, shape: list[tuple[int, int]], origin: tuple[int, int], region_id: int, mark: str) -> bool:
+        """
+        Verifica se é possível colocar a forma no tabuleiro a partir de origin, de acordo com a regras
+        """
+        # Verifica se a região já está preenchida
+        region_index = region_id - 1
+        if region_index < 0 or region_index >= len(self.haspiece) or self.haspiece[region_index]:
+            return False
+        
+        piece_positions = []
+        # Fronteira declara que se a peça está em contacto com uma peça já colocada
+        fronter = False
+
+        for dr, dc in shape:
+            r, c = origin[0] + dr, origin[1] + dc
+            
+            # Verifica se a posição está dentro dos limites do tabuleiro
+            if not (0 <= r < self.height and 0 <= c < self.width):
+                return False
+            
+            value = self.board[r, c]
+            # A peça não pode sair da região
+            if not value == region_id:
+                return False
+            
             piece_positions.append((r, c))
 
-        if not is_first_piece and not frontier: # Não faz parte da fronteira
+            # Garante que a peça não estaria em contacto com uma peça igual
+            for adjacent_r, adjacent_c in DIRECTIONS:
+                adj_r, adj_c = r + adjacent_r, c + adjacent_c
+                if (0 <= adj_r < self.height and 0 <= adj_c < self.width and 
+                    self.board[adj_r, adj_c] == mark):
+                    return False
+                
+            # Garante que a peça está em contacto com pelo menos uma peça já colocada
+            if not fronter: 
+                for adjacent_r, adjacent_c in DIRECTIONS:
+                    adj_r, adj_c = r + adjacent_r, c + adjacent_c
+                    if (0 <= adj_r < self.height and 0 <= adj_c < self.width and
+                        self.board[adj_r, adj_c] in MARKS):
+                        fronter = True
+                        break
+        
+        # Vê se a peça faz um O (2x2 square)
+        if self.makes_2x2(origin, shape):
             return False
         
-        if self.makes_2x2(set(piece_positions)): # Forma uma quadrado
-            return False
-        
-        return True
+        # Devolve se a peça pode ser colocada
+        # Se a peça é a primeira, não é preciso que faça fronteira
+        return fronter or not any(self.haspiece)
     
     def place(self, shape: list[tuple[int, int]], origin: tuple[int, int], mark) -> 'Board':
         """Retorna uma nova instância de Board com a peça colocada, marcada com `mark`."""
@@ -203,16 +246,16 @@ class Board:
         new_haspiece = self.haspiece.copy()
         
         region_id = self.board[origin[0], origin[1]]
-        new_haspiece[int(region_id) - 1] = True
+        new_haspiece[region_id - 1] = True
 
         return Board(new_board_array, new_haspiece, self.regions, self.cells)
 
     def adjacent_regions(self, region:int, diag: bool) -> list:
         """Devolve uma lista das regiões que fazem fronteira com a região enviada no argumento."""
         regions = set()
-        region_cells = self.cells[int(region) - 1]
+        region_cells = self.cells[region]
 
-        adjacent_cells = self.adjacent_positions(*region_cells[0], diag)
+        adjacent_cells = self.adjacent_positions(*next(iter(region_cells)), diag)
 
         for r, c in adjacent_cells:
             if self.board[r, c] != region:
@@ -271,7 +314,7 @@ class Board:
         for line in stdin:
             line = line.strip()
             if line:
-                lines.append(line.split())
+                lines.append([int(r) for r in line.split()])
 
         board_data = np.array(lines, dtype=object)
         
@@ -299,14 +342,15 @@ class Nuruomino(Problem):
         """
         potential_actions = {}
         for region_id in board.regions:
-            region = int(region_id) - 1 
-            region_cells = board.cells[region]
+            region_cells = board.cells[region_id]
 
             region_actions = []
             for origin in region_cells:
                 for mark, shapes in PIECES.items():
                     for shape in shapes:
-                        region_actions.append((region_id, shape, origin, mark))
+                        if board.fits(shape, origin):
+                            # Adiciona a ação (shape, origin, region_id, mark)
+                            region_actions.append((shape, origin, region_id, mark))
             
             region_actions.sort(key=lambda x: self.action_priority[x[3]])
             potential_actions[region_id] = region_actions
@@ -321,18 +365,18 @@ class Nuruomino(Problem):
             region_id for region_id in board.regions if not board.haspiece[region_id - 1]
         ]
         for region_id in empty_regions_ids:
-            inference_region_cells = board.cells[int(region_id) - 1]
+            inference_region_cells = board.cells[region_id]
             if len(inference_region_cells) == 4:
                 for action in self.potential_actions[region_id]:
-                    if board.can_place(action[1], action[2], action[0], action[3]):
+                    if board.can_place(action[0], action[1], action[2], action[3]):
                         return [action]
                     
         actions_by_region_size = []
         for region_id in empty_regions_ids: # Não fez inferências
-            region_size = len(board.cells[region_id - 1])
+            region_size = len(board.cells[region_id])
             region_actions = []
             for action in self.potential_actions[region_id]:
-                if board.can_place(action[1], action[2], action[0], action[3]):
+                if board.can_place(action[0], action[1], action[2], action[3]):
                     region_actions.append(action)
             if region_actions:
                 actions_by_region_size.append((region_size, region_actions))
@@ -347,7 +391,7 @@ class Nuruomino(Problem):
 
     def result(self, state: NuruominoState, action) -> NuruominoState:
         """Retorna o estado resultante de executar a 'action' sobre 'state'."""
-        new_board = state.board.place(action[1], action[2], action[3])
+        new_board = state.board.place(action[0], action[1], action[3])
         return NuruominoState(new_board)
         
 
@@ -356,7 +400,6 @@ class Nuruomino(Problem):
         um estado objetivo. Deve verificar se todas as posições do tabuleiro
         estão preenchidas de acordo com as regras do problema."""
         self.cnt += 1
-        # print(self.cnt)
         return all(state.board.haspiece) # Verifica se tem uma peça em todas as regiões
 
     def h(self, node: Node):
