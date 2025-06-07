@@ -358,42 +358,45 @@ class Nuruomino(Problem):
         return potential_actions    
 
     def actions(self, state: NuruominoState):
+        """Gera todas as formas válidas de colocar uma peça no estado atual."""
         board = state.board
 
-        empty_regions_ids = [
-            region_id for region_id in board.regions if not board.haspiece[region_id - 1]
-        ]
+        empty_regions_ids = [region_id for region_id in board.regions if not board.haspiece[region_id - 1]]
 
-        # Gather valid actions for each region
+        for region_id in empty_regions_ids: # Se uma região só tem uma ação possível, retorna essa ação
+            if len(board.cells[region_id]) == 4:
+                return self.potential_actions[region_id]
+        
         region_action_counts = []
         region_actions_dict = {}
 
+        
         for region_id in empty_regions_ids:
             region_actions = [
                 action for action in self.potential_actions[region_id]
-                if board.can_place(action[0], action[1], action[2], action[3])
+                if board.can_place(action[0], action[1], action[2], action[3]) # Verifica se a ação é válida
             ]
-            if region_actions:
-                region_action_counts.append(len(region_actions))
+            if region_actions: # Guarda o número de ações num dicionário
+                region_action_counts.append(len(region_actions)) 
                 region_actions_dict[region_id] = region_actions
 
         if not region_action_counts:
             return []
 
-        # Find the minimum, second minimum, and third minimum number of actions
+        # Encontra os três que têm menos ações
         sorted_counts = sorted(set(region_action_counts))
         if len(sorted_counts) >= 3:
             third_min = sorted_counts[2]
         else:
-            third_min = sorted_counts[-1]  # Use the largest available if less than 3
+            third_min = sorted_counts[-1]
 
-        # Collect actions for regions with less than the third minimum
+        # Coloca as ações das regiões com menos ações do que o terceiro mínimo
         actions = []
         for region_id, region_actions in region_actions_dict.items():
             if len(region_actions) < third_min:
                 actions.extend(region_actions)
 
-        # If nothing found (all regions have the same count or only one/two unique counts), fallback to all actions with the minimum or second minimum
+        # Não encontra as ações em cima
         if not actions:
             for region_id, region_actions in region_actions_dict.items():
                 if len(region_actions) == third_min:
